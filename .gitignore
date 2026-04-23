@@ -1,0 +1,39 @@
+# Build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+server
+bin/
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (frontend)
+node_modules/
+dist/
+.env.local
+.env.*.local
+
+# Environment
+.env
+*.log
+
+# Backend build
+backend/server
+backend/bin/
