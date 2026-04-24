@@ -15,7 +15,7 @@ WorkPal/
 │   │   ├── user/          # 用户模块
 │   │   ├── im/            # IM 即时通讯模块（WebSocket）
 │   │   ├── file/          # 文件存储模块
-│   │   ├── search/         # 搜索模块（PostgreSQL ILIKE）
+│   │   ├── search/        # 搜索模块（PostgreSQL ILIKE）
 │   │   └── org/           # 组织架构模块
 │   ├── pkg/                # 公共工具包
 │   ├── Makefile
@@ -44,7 +44,7 @@ WorkPal/
 - **缓存**: Redis 7
 - **消息队列**: Redis Streams（Phase 3）
 - **全文搜索**: PostgreSQL ILIKE（Phase 3）
-- **文件存储**: 本地文件系统（Phase 3，MinIO 可选）
+- **文件存储**: 本地文件系统（Phase 3）
 - **ORM**: GORM
 - **配置**: Viper
 - **监控**: Prometheus client_golang（Phase 3）
@@ -84,6 +84,13 @@ WorkPal/
 - 多因素认证
 
 ## 快速开始
+
+### 环境要求
+
+- Go 1.21+
+- PostgreSQL 16
+- Redis 7
+- Node.js 18+
 
 ### 1. 启动基础设施（Docker）
 
@@ -176,7 +183,6 @@ PostgreSQL:  localhost:5432
 Redis:       localhost:6379
 后端 API:    localhost:8080
 前端:       localhost:3000 (开发模式)
-Prometheus: localhost:9090 (可选)
 ```
 
 ## 配置说明
@@ -198,7 +204,7 @@ redis:
   port: 6379
 
 file:
-  store_type: "local"  # local 或 minio
+  store_type: "local"  # 本地存储（生产环境建议换 MinIO）
   local_base_path: "/tmp/workpal-files"
   max_file_size_mb: 100
 ```
