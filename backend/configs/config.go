@@ -39,6 +39,10 @@ type RedisConfig struct {
 	DB       int
 }
 
+func (r *RedisConfig) Addr() string {
+	return fmt.Sprintf("%s:%d", r.Host, r.Port)
+}
+
 type FileConfig struct {
 	StoreType    string
 	LocalBaseDir string
