@@ -57,8 +57,8 @@ func (s *UserService) ListUsers(ctx context.Context, page, pageSize int) ([]*mod
 }
 
 func (s *UserService) Search(ctx context.Context, keyword string, page, pageSize int) ([]*model.User, int64, error) {
-	// TODO: 实现模糊搜索
-	return s.ListUsers(ctx, page, pageSize)
+	offset := (page - 1) * pageSize
+	return s.userRepo.Search(ctx, keyword, offset, pageSize)
 }
 
 // GetCurrentUser 获取当前登录用户信息（从 context 的 userID）

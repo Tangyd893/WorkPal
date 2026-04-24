@@ -14,10 +14,10 @@ WorkPal/
 │   │   ├── common/        # 公共组件（错误/中间件/响应）
 │   │   ├── user/          # 用户模块
 │   │   ├── im/            # IM 即时通讯模块（WebSocket）
-│   │   ├── file/          # 文件存储模块
-│   │   ├── search/        # 搜索模块（PostgreSQL ILIKE）
+│   │   ├── file/          # 文件存储模块（MinIO + 本地）
+│   │   ├── search/        # 搜索模块（Bleve 全文索引）
 │   │   └── org/           # 组织架构模块
-│   ├── pkg/                # 公共工具包
+│   ├── pkg/                # 公共工具包（消息队列）
 │   ├── Makefile
 │   └── go.mod
 │
@@ -38,16 +38,16 @@ WorkPal/
 
 ### 后端
 
-- **语言**: Go 1.21+
+- **语言**: Go 1.21+（Go 1.22.2 测试通过）
 - **框架**: Gin (HTTP) + gorilla/websocket
 - **数据库**: PostgreSQL 16
 - **缓存**: Redis 7
-- **消息队列**: Redis Streams（Phase 3）
-- **全文搜索**: Bleve 全文索引（Phase 3）
-- **文件存储**: 本地文件系统（Phase 3）
+- **消息队列**: Redis Streams
+- **全文搜索**: Bleve 全文索引（v1.0.14）
+- **文件存储**: MinIO + 本地文件系统双模式
 - **ORM**: GORM
 - **配置**: Viper
-- **监控**: Prometheus client_golang（Phase 3）
+- **监控**: Prometheus client_golang
 
 ### 前端
 
@@ -72,9 +72,10 @@ WorkPal/
 
 ### Phase 3 - 生产级扩展 ✅
 - Redis Streams 消息队列
-- **全文搜索**: Bleve 全文索引
-- 文件上传/下载（MinIO + 本地双模式）
+- Bleve 全文搜索（消息索引 + 搜索）
+- MinIO 对象存储 + 本地文件双模式
 - Prometheus 指标监控
+- 用户模糊搜索（PostgreSQL ILIKE）
 - Docker Compose 一键部署
 
 ### Phase 4 - 高级特性（待开发）
@@ -106,8 +107,11 @@ docker compose ps
 
 ```bash
 cd backend
-go mod download
-go run cmd/server/main.go
+GOTOOLCHAIN=local go build ./cmd/server/
+./server
+
+# 或直接运行
+GOTOOLCHAIN=local go run cmd/server/main.go
 
 # 服务启动在 http://localhost:8080
 ```
@@ -132,6 +136,12 @@ pnpm dev
 | GET | `/api/v1/users/me` | 当前用户信息 | ✅ |
 | PUT | `/api/v1/users/me` | 更新个人资料 | ✅ |
 
+### 用户
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| GET | `/api/v1/users` | 用户列表（分页） | ✅ |
+| GET | `/api/v1/users/search?q=` | 模糊搜索用户 | ✅ |
+
 ### IM 会话
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
@@ -147,7 +157,7 @@ pnpm dev
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | GET | `/api/v1/conversations/:id/messages` | 历史消息 | ✅ |
-| POST | `/api/v1/conversations/:id/messages` | 发送消息 | ✅ |
+| POST | `/api/v1/conversations/:id/messages` | 发送消息（自动索引） | ✅ |
 | PUT | `/api/v1/messages/:id` | 编辑消息 | ✅ |
 | DELETE | `/api/v1/messages/:id` | 撤回消息 | ✅ |
 | POST | `/api/v1/conversations/:id/read-all` | 全部已读 | ✅ |
@@ -163,7 +173,7 @@ pnpm dev
 ### 搜索
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/api/v1/search/messages?q=keyword` | 搜索消息 | ✅ |
+| GET | `/api/v1/search/messages?q=` | 搜索消息（Bleve） | ✅ |
 
 ### 其他
 | 方法 | 路径 | 说明 | 认证 |
@@ -176,11 +186,14 @@ pnpm dev
 
 ```bash
 # 启动所有服务
+cd backend/deployments/docker
 docker compose up -d
 
 # 服务端口
 PostgreSQL:  localhost:5432
 Redis:       localhost:6379
+MinIO API:   localhost:9000
+MinIO Console: localhost:9001
 后端 API:    localhost:8080
 前端:       localhost:3000 (开发模式)
 ```
@@ -204,10 +217,29 @@ redis:
   port: 6379
 
 file:
-  store_type: "local"  # 本地存储（生产环境建议换 MinIO）
-  local_base_path: "/tmp/workpal-files"
-  max_file_size_mb: 100
+  store_type: "minio"   # minio / local
+  minio:
+    endpoint: "localhost:9000"
+    access_key: "workpal"
+    secret_key: "workpal123456"
+    bucket: "workpal"
+    use_ssl: false
+
+search:
+  engine: "bleve"
+  bleve:
+    index_path: "/tmp/workpal-search"
 ```
+
+## 监控系统
+
+Prometheus 指标端点：`GET /metrics`
+
+当前指标：
+- `http_requests_total` - HTTP 请求计数
+- `http_request_duration_seconds` - 请求延迟
+- `websocket_connections` - WebSocket 连接数
+- `messages_total` - 消息收发计数
 
 ## Makefile 命令
 
@@ -217,15 +249,19 @@ make run       # 运行后端
 make build     # 编译二进制
 make docker-up   # 启动 Docker 服务
 make docker-down # 停止 Docker 服务
-make test      # 运行测试
-make lint      # 代码检查
 ```
 
-## 监控系统（Phase 3）
+## 编译验证
 
-Prometheus 指标端点：`GET /metrics`
+```bash
+# 后端
+cd backend
+GOTOOLCHAIN=local go build ./cmd/server/  && echo "✅ 后端编译通过"
 
-可配合 Grafana 使用，配置 Prometheus 数据源即可。
+# 前端
+cd frontend
+npm run build  && echo "✅ 前端编译通过"
+```
 
 ## License
 

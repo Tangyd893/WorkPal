@@ -9,21 +9,24 @@ import (
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/service"
-	"github.com/Tangyd893/WorkPal/backend/internal/im/ws"
+	imWS "github.com/Tangyd893/WorkPal/backend/internal/im/ws"
+	searchSvc "github.com/Tangyd893/WorkPal/backend/internal/search/service"
 	"github.com/gin-gonic/gin"
 )
 
 type MessageHandler struct {
-	msgSvc *service.MessageService
-	convSvc *service.ConversationService
-	hub    *ws.Hub
+	msgSvc    *service.MessageService
+	convSvc  *service.ConversationService
+	hub      *imWS.Hub
+	searchSvc *searchSvc.SearchService
 }
 
-func NewMessageHandler(msgSvc *service.MessageService, convSvc *service.ConversationService, hub *ws.Hub) *MessageHandler {
+func NewMessageHandler(msgSvc *service.MessageService, convSvc *service.ConversationService, hub *imWS.Hub, searchSvc *searchSvc.SearchService) *MessageHandler {
 	return &MessageHandler{
-		msgSvc:  msgSvc,
-		convSvc: convSvc,
-		hub:     hub,
+		msgSvc:    msgSvc,
+		convSvc:   convSvc,
+		hub:      hub,
+		searchSvc: searchSvc,
 	}
 }
 
@@ -112,11 +115,16 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	}
 
 	// 通过 WebSocket 广播到房间
-	wsMsg := ws.NewChatMsg(userID, convID, req.Content, 0)
+	wsMsg := imWS.NewChatMsg(userID, convID, req.Content, 0)
 	wsMsg.CreatedAt = msg.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
 	wsData, _ := wsMsg.Marshal()
 	if h.hub != nil {
 		h.hub.BroadcastToRoom(convID, userID, wsData, nil)
+	}
+
+	// 索引到 Bleve 搜索
+	if h.searchSvc != nil {
+		h.searchSvc.IndexMessage(msg)
 	}
 
 	response.Success(c, msg)

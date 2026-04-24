@@ -71,6 +71,23 @@ func (r *UserRepo) List(ctx context.Context, offset, limit int) ([]*model.User, 
 	return users, total, nil
 }
 
+// Search 模糊搜索用户（用户名或昵称）
+func (r *UserRepo) Search(ctx context.Context, keyword string, offset, limit int) ([]*model.User, int64, error) {
+	var users []*model.User
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&model.User{}).
+		Where("deleted_at IS NULL AND (username ILIKE ? OR nickname ILIKE ? OR email ILIKE ?)",
+			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+
+	query.Count(&total)
+	result := query.Offset(offset).Limit(limit).Order("id desc").Find(&users)
+	if result.Error != nil {
+		return nil, 0, result.Error
+	}
+	return users, total, nil
+}
+
 func isDuplicateKey(err error) bool {
 	return err != nil && (contains(err.Error(), "duplicate key") || contains(err.Error(), "UNIQUE constraint"))
 }

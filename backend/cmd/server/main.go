@@ -158,7 +158,7 @@ func main() {
 	hub := imWS.InitHub()
 
 	convHandler := imHandler.NewConversationHandler(convSvc)
-	msgHandler := imHandler.NewMessageHandler(msgSvc, convSvc, hub)
+	msgHandler := imHandler.NewMessageHandler(msgSvc, convSvc, hub, searchService)
 
 	// File 模块
 	fRepo := fileRepo.NewFileRepo(db)
