@@ -32,9 +32,9 @@ file:
     use_ssl: false
 
 search:
-  engine: "bleve"  # bleve / elasticsearch
+  engine: "bleve"  # bleve / pg（PostgreSQL ILIKE 作为备用）
   bleve:
-    index_path: "/tmp/workpal-search"  # 内存索引路径
+    index_path: "/tmp/workpal-search"  # 索引存储路径
   elasticsearch:
     addresses:
       - "localhost:9200"

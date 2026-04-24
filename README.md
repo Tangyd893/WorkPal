@@ -43,7 +43,7 @@ WorkPal/
 - **数据库**: PostgreSQL 16
 - **缓存**: Redis 7
 - **消息队列**: Redis Streams（Phase 3）
-- **全文搜索**: PostgreSQL ILIKE（Phase 3）
+- **全文搜索**: Bleve 全文索引（Phase 3）
 - **文件存储**: 本地文件系统（Phase 3）
 - **ORM**: GORM
 - **配置**: Viper
@@ -72,8 +72,8 @@ WorkPal/
 
 ### Phase 3 - 生产级扩展 ✅
 - Redis Streams 消息队列
-- PostgreSQL ILIKE 全文搜索
-- 文件上传/下载（本地存储）
+- **全文搜索**: Bleve 全文索引
+- 文件上传/下载（MinIO + 本地双模式）
 - Prometheus 指标监控
 - Docker Compose 一键部署
 

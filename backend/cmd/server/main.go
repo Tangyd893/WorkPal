@@ -123,9 +123,15 @@ func main() {
 	msgqueue.Init(mq)
 	log.Println("✓ Redis Streams 消息队列初始化完成")
 
-	// 5. 初始化搜索服务（PostgreSQL ILIKE）
-	searchService := searchSvc.NewSearchService(db)
-	log.Println("✓ 搜索服务初始化完成（PostgreSQL ILIKE）")
+	// 5. 初始化 Bleve 搜索服务
+	var searchService *searchSvc.SearchService
+	searchService, err = searchSvc.NewSearchService(cfg.Search.Bleve.IndexPath)
+	if err != nil {
+		log.Printf("⚠ Bleve 搜索服务初始化失败: %v (搜索功能将不可用)", err)
+		searchService = nil
+	} else {
+		log.Println("✓ Bleve 搜索服务初始化完成")
+	}
 
 	// 6. 自动迁移 Schema
 	if err := autoMigrate(db); err != nil {

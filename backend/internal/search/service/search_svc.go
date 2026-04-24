@@ -2,37 +2,48 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
-	"gorm.io/gorm"
+	"github.com/blevesearch/bleve"
 )
 
-// SearchService 搜索服务（基于 PostgreSQL ILIKE）
-type SearchService struct {
-	db *gorm.DB
-}
-
-func NewSearchService(db *gorm.DB) *SearchService {
-	return &SearchService{db: db}
+// MessageDoc Bleve 索引文档
+type MessageDoc struct {
+	ID        string `json:"id"`
+	ConvID    int64  `json:"conv_id"`
+	SenderID  int64  `json:"sender_id"`
+	Content   string `json:"content"`
+	Type      int8   `json:"type"`
+	CreatedAt string `json:"created_at"`
 }
 
 // SearchResult 搜索结果
 type SearchResult struct {
 	Messages []*model.Message `json:"messages"`
-	Total    int64            `json:"total"`
+	Total    int64           `json:"total"`
 }
 
-// IndexMessage 索引消息（PostgreSQL 无需显式索引，消息创建时自动可用）
-func (s *SearchService) IndexMessage(msg *model.Message) error {
-	// PostgreSQL 的 ILIKE 会自动使用 messages.content 上的索引（如果有）
-	// 消息创建时会自动被搜索到，无需额外索引操作
-	return nil
+// SearchService 搜索服务（Bleve 全文索引）
+type SearchService struct {
+	index bleve.Index
 }
 
-// IndexMessages 批量索引
-func (s *SearchService) IndexMessages(msgs []*model.Message) error {
-	return nil
+// NewSearchService 创建 Bleve 搜索服务
+func NewSearchService(indexPath string) (*SearchService, error) {
+	// 创建内存索引（开发环境）或个人存储路径
+	index, err := bleve.New(indexPath, bleve.NewIndexMapping())
+	if err != nil {
+		// 索引已存在，尝试打开
+		index, err = bleve.Open(indexPath)
+		if err != nil {
+			return nil, fmt.Errorf("创建搜索索引失败: %w", err)
+		}
+	}
+	return &SearchService{index: index}, nil
 }
 
 // SearchInConv 会话内搜索
@@ -40,34 +51,47 @@ func (s *SearchService) SearchInConv(ctx context.Context, convID int64, query st
 	if query == "" {
 		return &SearchResult{Messages: []*model.Message{}, Total: 0}, nil
 	}
-
-	offset := (page - 1) * pageSize
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return &SearchResult{Messages: []*model.Message{}, Total: 0}, nil
 	}
 
-	var messages []*model.Message
-	var total int64
+	offset := (page - 1) * pageSize
 
-	// ILIKE 搜索（大小写不敏感）
-	searchPattern := "%" + query + "%"
+	// 使用 Bleve MatchQuery
+	searchRequest := bleve.NewSearchRequest(bleve.NewMatchQuery(query))
+	searchRequest.From = offset
+	searchRequest.Size = pageSize
+	searchRequest.SortBy([]string{"-CreatedAt"})
 
-	db := s.db.WithContext(ctx).Model(&model.Message{}).
-		Where("conv_id = ? AND deleted_at IS NULL AND content ILIKE ?", convID, searchPattern)
-
-	db.Count(&total)
-
-	err := db.Order("created_at DESC").
-		Offset(offset).
-		Limit(pageSize).
-		Find(&messages).Error
-
+	result, err := s.index.Search(searchRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return &SearchResult{Messages: messages, Total: total}, nil
+	var messages []*model.Message
+	for _, hit := range result.Hits {
+		var doc MessageDoc
+		// 尝试从 _source 字段获取
+		if src, ok := hit.Fields["_source"]; ok {
+			if data, ok := src.([]byte); ok {
+				json.Unmarshal(data, &doc)
+			}
+		}
+		// 过滤当前会话
+		if doc.ConvID == convID || convID == 0 {
+			messages = append(messages, &model.Message{
+				ID:        parseInt64(hit.ID),
+				ConvID:    doc.ConvID,
+				SenderID:  doc.SenderID,
+				Content:   doc.Content,
+				Type:      doc.Type,
+				CreatedAt: parseTime(doc.CreatedAt),
+			})
+		}
+	}
+
+	return &SearchResult{Messages: messages, Total: int64(result.Total)}, nil
 }
 
 // GlobalSearch 全局搜索
@@ -75,41 +99,104 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, page, pa
 	if query == "" {
 		return &SearchResult{Messages: []*model.Message{}, Total: 0}, nil
 	}
-
-	offset := (page - 1) * pageSize
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return &SearchResult{Messages: []*model.Message{}, Total: 0}, nil
 	}
 
-	var messages []*model.Message
-	var total int64
+	offset := (page - 1) * pageSize
 
-	searchPattern := "%" + query + "%"
+	searchRequest := bleve.NewSearchRequest(bleve.NewMatchQuery(query))
+	searchRequest.From = offset
+	searchRequest.Size = pageSize
+	searchRequest.SortBy([]string{"-CreatedAt"})
 
-	db := s.db.WithContext(ctx).Model(&model.Message{}).
-		Where("deleted_at IS NULL AND content ILIKE ?", searchPattern)
-
-	db.Count(&total)
-
-	err := db.Order("created_at DESC").
-		Offset(offset).
-		Limit(pageSize).
-		Find(&messages).Error
-
+	result, err := s.index.Search(searchRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return &SearchResult{Messages: messages, Total: total}, nil
+	var messages []*model.Message
+	for _, hit := range result.Hits {
+		var doc MessageDoc
+		if src, ok := hit.Fields["_source"]; ok {
+			if data, ok := src.([]byte); ok {
+				json.Unmarshal(data, &doc)
+			}
+		}
+		messages = append(messages, &model.Message{
+			ID:        parseInt64(hit.ID),
+			ConvID:    doc.ConvID,
+			SenderID:  doc.SenderID,
+			Content:   doc.Content,
+			Type:      doc.Type,
+			CreatedAt: parseTime(doc.CreatedAt),
+		})
+	}
+
+	return &SearchResult{Messages: messages, Total: int64(result.Total)}, nil
 }
 
-// Search 搜索（兼容接口）
+// IndexMessage 索引单条消息
+func (s *SearchService) IndexMessage(msg *model.Message) error {
+	if s.index == nil {
+		return nil
+	}
+	doc := MessageDoc{
+		ID:        fmt.Sprintf("%d", msg.ID),
+		ConvID:    msg.ConvID,
+		SenderID:  msg.SenderID,
+		Content:   msg.Content,
+		Type:      msg.Type,
+		CreatedAt: msg.CreatedAt.Format(time.RFC3339),
+	}
+	return s.index.Index(doc.ID, doc)
+}
+
+// IndexMessages 批量索引
+func (s *SearchService) IndexMessages(msgs []*model.Message) error {
+	if s.index == nil {
+		return nil
+	}
+	batch := s.index.NewBatch()
+	for _, msg := range msgs {
+		doc := MessageDoc{
+			ID:        fmt.Sprintf("%d", msg.ID),
+			ConvID:    msg.ConvID,
+			SenderID:  msg.SenderID,
+			Content:   msg.Content,
+			Type:      msg.Type,
+			CreatedAt: msg.CreatedAt.Format(time.RFC3339),
+		}
+		batch.Index(doc.ID, doc)
+	}
+	return s.index.Batch(batch)
+}
+
+// Close 关闭索引
+func (s *SearchService) Close() error {
+	if s.index != nil {
+		return s.index.Close()
+	}
+	return nil
+}
+
+// Search 搜索（兼容）
 func (s *SearchService) Search(ctx context.Context, query string, page, pageSize int) (*SearchResult, error) {
 	return s.GlobalSearch(ctx, query, page, pageSize)
 }
 
-// Close 关闭（无资源需要释放）
-func (s *SearchService) Close() error {
-	return nil
+// 辅助函数
+func parseInt64(s string) int64 {
+	var n int64
+	fmt.Sscanf(s, "%d", &n)
+	return n
+}
+
+func parseTime(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	t, _ := time.Parse(time.RFC3339, s)
+	return t
 }
