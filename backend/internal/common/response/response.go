@@ -62,7 +62,7 @@ func errToHTTP(code int) int {
 		return http.StatusUnauthorized
 	case code >= 40300 && code < 40400:
 		return http.StatusForbidden
-	case code >= 40400 && code < 41000:
+	case code >= 40400 && code < 40500:
 		return http.StatusNotFound
 	case code >= 40900 && code < 41000:
 		return http.StatusConflict
