@@ -12,6 +12,7 @@ import (
 	"github.com/Tangyd893/WorkPal/backend/internal/file/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/file/repo"
 	"github.com/google/uuid"
+	"github.com/minio/minio-go/v6"
 )
 
 // FileStore 文件存储接口
@@ -54,6 +55,54 @@ func (s *LocalFileStore) Delete(ctx context.Context, key string) error {
 
 func (s *LocalFileStore) GetURL(ctx context.Context, key string) (string, error) {
 	return "/files/" + key, nil
+}
+
+// MinIOFileStore MinIO 对象存储
+type MinIOFileStore struct {
+	client   *minio.Client
+	bucket  string
+	endpoint string
+	useSSL   bool
+}
+
+func NewMinIOFileStore(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*MinIOFileStore, error) {
+	client, err := minio.New(endpoint, accessKey, secretKey, useSSL)
+	if err != nil {
+		return nil, err
+	}
+	return &MinIOFileStore{
+		client:   client,
+		bucket:  bucket,
+		endpoint: endpoint,
+		useSSL:   useSSL,
+	}, nil
+}
+
+func (s *MinIOFileStore) Upload(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
+	_, err := s.client.PutObject(s.bucket, key, r, size, minio.PutObjectOptions{
+		ContentType: contentType,
+	})
+	return err
+}
+
+func (s *MinIOFileStore) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+	obj, err := s.client.GetObject(s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return obj, nil
+}
+
+func (s *MinIOFileStore) Delete(ctx context.Context, key string) error {
+	return s.client.RemoveObject(s.bucket, key)
+}
+
+func (s *MinIOFileStore) GetURL(ctx context.Context, key string) (string, error) {
+	protocol := "http"
+	if s.useSSL {
+		protocol = "https"
+	}
+	return fmt.Sprintf("%s://%s/%s/%s", protocol, s.endpoint, s.bucket, key), nil
 }
 
 // FileService 文件服务

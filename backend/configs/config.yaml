@@ -21,7 +21,7 @@ redis:
   streams_key: "workpal:streams"  # Redis Streams consumer group key
 
 file:
-  store_type: "local"  # 本地存储（生产环境换 MinIO 需要 Go 1.25+）
+  store_type: "minio"  # local / minio
   local_base_path: "/tmp/workpal-files"
   max_file_size_mb: 100
   minio:
