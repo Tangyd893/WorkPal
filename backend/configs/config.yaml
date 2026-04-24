@@ -18,11 +18,27 @@ redis:
   port: 6379
   password: ""
   db: 0
+  streams_key: "workpal:streams"  # Redis Streams consumer group key
 
 file:
-  store_type: "local"  # local / minio
+  store_type: "minio"  # local / minio
   local_base_path: "/tmp/workpal-files"
   max_file_size_mb: 100
+  minio:
+    endpoint: "localhost:9000"
+    access_key: "workpal"
+    secret_key: "workpal123456"
+    bucket: "workpal"
+    use_ssl: false
+
+search:
+  engine: "bleve"  # bleve / elasticsearch
+  bleve:
+    index_path: "/tmp/workpal-search"  # 内存索引路径
+  elasticsearch:
+    addresses:
+      - "localhost:9200"
+    index: "workpal-messages"
 
 ws:
   read_buffer_size: 1024

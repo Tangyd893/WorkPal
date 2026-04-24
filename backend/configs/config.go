@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig
 	Redis    RedisConfig
 	File     FileConfig
+	Search   SearchConfig
 	WS       WSConfig
 }
 
@@ -33,10 +34,11 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	Host     string
-	Port     int
-	Password string
-	DB       int
+	Host      string
+	Port      int
+	Password  string
+	DB        int
+	StreamsKey string
 }
 
 func (r *RedisConfig) Addr() string {
@@ -44,9 +46,33 @@ func (r *RedisConfig) Addr() string {
 }
 
 type FileConfig struct {
-	StoreType    string
-	LocalBaseDir string
+	StoreType     string
+	LocalBaseDir  string
 	MaxFileSizeMB int
+	MinIO         MinIOConfig
+}
+
+type MinIOConfig struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	UseSSL    bool
+}
+
+type SearchConfig struct {
+	Engine      string
+	Bleve       BleveConfig
+	Elasticsearch ElasticsearchConfig
+}
+
+type BleveConfig struct {
+	IndexPath string
+}
+
+type ElasticsearchConfig struct {
+	Addresses []string
+	Index     string
 }
 
 type WSConfig struct {
