@@ -6,9 +6,8 @@ import (
 	"time"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
-	"github.com/Tangyd893/WorkPal/backend/internal/user/repo"
 	apierr "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
-	"github.com/Tangyd893/WorkPal/backend/pkg/auth"
+	auth "github.com/Tangyd893/WorkPal/backend/pkg/auth"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -20,12 +19,20 @@ var (
 	ErrInvalidPassword   = apierr.New(40101, "用户名或密码错误")
 )
 
+// UserRepository 接口，便于测试时注入 mock
+type UserRepository interface {
+	Create(ctx context.Context, user *model.User) error
+	GetByUsername(ctx context.Context, username string) (*model.User, error)
+	GetByID(ctx context.Context, id int64) (*model.User, error)
+}
+
 type AuthService struct {
-	userRepo      *repo.UserRepo
+	userRepo      UserRepository
 	jwtExpiryHours int
 }
 
-func NewAuthService(userRepo *repo.UserRepo, jwtExpiryHours int) *AuthService {
+// NewAuthService 注入 *repo.UserRepo（生产）或 mock（测试）
+func NewAuthService(userRepo UserRepository, jwtExpiryHours int) *AuthService {
 	return &AuthService{
 		userRepo:      userRepo,
 		jwtExpiryHours: jwtExpiryHours,
