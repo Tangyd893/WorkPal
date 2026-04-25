@@ -75,6 +75,14 @@ WorkPal/
 | 状态管理 | Zustand |
 | E2E 测试 | Playwright |
 
+### DevOps / 基础设施
+
+| 类别 | 技术 |
+|------|------|
+| 容器化 | Docker Compose（PostgreSQL + Redis + MinIO） |
+| CI/CD | GitHub Actions（全流程自动化） |
+| 监控 | Prometheus（`/metrics`） |
+
 ---
 
 ## 开发进度
