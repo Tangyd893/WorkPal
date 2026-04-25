@@ -158,3 +158,6 @@ func (r *ConversationRepo) GetLastMessage(ctx context.Context, convID int64) (*m
 	}
 	return &msg, nil
 }
+
+// 包内哨兵错误
+var ErrConvNotFound = apperrors.ErrConversationNotFound
