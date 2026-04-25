@@ -68,7 +68,9 @@ func (h *FileHandler) Download(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, f.Name))
 	c.Header("Content-Type", f.ContentType)
 	c.Header("Content-Length", strconv.FormatInt(f.Size, 10))
-	io.Copy(c.Writer, rc)
+	if _, err := io.Copy(c.Writer, rc); err != nil {
+		return
+	}
 }
 
 // ListByConv 获取会话文件列表

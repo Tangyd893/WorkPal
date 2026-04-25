@@ -44,8 +44,12 @@ func (s *ConversationService) CreatePrivateConv(ctx context.Context, userID, tar
 	}
 
 	// 双方都加入会话
-	s.convRepo.AddMember(ctx, &model.ConversationMember{ConvID: conv.ID, UserID: userID, JoinedAt: time.Now()})
-	s.convRepo.AddMember(ctx, &model.ConversationMember{ConvID: conv.ID, UserID: targetID, JoinedAt: time.Now()})
+	if err := s.convRepo.AddMember(ctx, &model.ConversationMember{ConvID: conv.ID, UserID: userID, JoinedAt: time.Now()}); err != nil {
+		return nil, err
+	}
+	if err := s.convRepo.AddMember(ctx, &model.ConversationMember{ConvID: conv.ID, UserID: targetID, JoinedAt: time.Now()}); err != nil {
+		return nil, err
+	}
 
 	return conv, nil
 }
@@ -69,7 +73,9 @@ func (s *ConversationService) CreateGroup(ctx context.Context, name string, owne
 	// 所有者+所有成员加入
 	allMembers := append([]int64{ownerID}, memberIDs...)
 	for _, uid := range allMembers {
-		s.convRepo.AddMember(ctx, &model.ConversationMember{ConvID: conv.ID, UserID: uid, JoinedAt: time.Now()})
+		if err := s.convRepo.AddMember(ctx, &model.ConversationMember{ConvID: conv.ID, UserID: uid, JoinedAt: time.Now()}); err != nil {
+			return nil, err
+		}
 	}
 
 	return conv, nil

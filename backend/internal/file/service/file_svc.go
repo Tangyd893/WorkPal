@@ -29,13 +29,17 @@ type LocalFileStore struct {
 }
 
 func NewLocalFileStore(basePath string) *LocalFileStore {
-	os.MkdirAll(basePath, 0755)
+	if err := os.MkdirAll(basePath, 0755); err != nil {
+		panic("failed to create base directory: " + err.Error())
+	}
 	return &LocalFileStore{BasePath: basePath}
 }
 
 func (s *LocalFileStore) Upload(ctx context.Context, key string, r io.Reader, size int64, contentType string) error {
 	fullPath := filepath.Join(s.BasePath, key)
-	os.MkdirAll(filepath.Dir(fullPath), 0755)
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return err
+	}
 	f, err := os.Create(fullPath)
 	if err != nil {
 		return err

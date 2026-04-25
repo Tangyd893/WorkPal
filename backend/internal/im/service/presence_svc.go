@@ -62,9 +62,11 @@ func (s *PresenceService) GetOnlineUsers(ctx context.Context) ([]int64, error) {
 	rdb.ZRemRangeByScore(ctx, presenceOnlineKey, "0", fmt.Sprintf("%d", cutoff))
 
 	// 获取在线用户
-	result, err := rdb.ZRangeByScore(ctx, presenceOnlineKey, &redis.ZRangeBy{
-		Min: fmt.Sprintf("%d", cutoff),
-		Max: fmt.Sprintf("%d", now),
+	result, err := rdb.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     presenceOnlineKey,
+		ByScore: true,
+		Start:   fmt.Sprintf("%d", cutoff),
+		Stop:    fmt.Sprintf("%d", now),
 	}).Result()
 	if err != nil {
 		return nil, err

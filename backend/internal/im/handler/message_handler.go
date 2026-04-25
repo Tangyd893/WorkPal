@@ -122,9 +122,9 @@ func (h *MessageHandler) Send(c *gin.Context) {
 		h.hub.BroadcastToRoom(convID, userID, wsData, nil)
 	}
 
-	// 索引到 Bleve 搜索
+	// 索引到 Bleve 搜索（非致命，失败不影响消息发送）
 	if h.searchSvc != nil {
-		h.searchSvc.IndexMessage(msg)
+		_ = h.searchSvc.IndexMessage(msg)
 	}
 
 	response.Success(c, msg)

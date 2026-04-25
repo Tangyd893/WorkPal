@@ -159,12 +159,9 @@ func (c *Client) handleChat(msg *WSMessage) {
 	// msg.To 是目标（user_id 或 conv_id）
 	// 根据 msg.ConvID 判断是否是会话 ID
 	convID := msg.ConvID
-	if convID <= 0 {
-		// 私聊时 ConvID=0，To 字段是对方 user_id
-		if _, err := strconv.ParseInt(msg.To, 10, 64); err == nil {
-			// 私聊 - 需要业务层处理会话创建，Hub 只做路由
-		}
-	}
+	// 私聊时 ConvID=0，To 字段是对方 user_id：
+	// TODO: 私聊路由需业务层处理，Hub 这里只做占位，未来收到私聊消息时
+	// 应查询会话关系后再路由，而非直接广播到 ConvID=0
 
 	// 将消息广播到会话房间
 	if convID > 0 {

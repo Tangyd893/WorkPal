@@ -75,7 +75,9 @@ func (s *SearchService) SearchInConv(ctx context.Context, convID int64, query st
 		// 尝试从 _source 字段获取
 		if src, ok := hit.Fields["_source"]; ok {
 			if data, ok := src.([]byte); ok {
-				json.Unmarshal(data, &doc)
+				if err := json.Unmarshal(data, &doc); err != nil {
+					continue
+				}
 			}
 		}
 		// 过滤当前会话
@@ -121,7 +123,9 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, page, pa
 		var doc MessageDoc
 		if src, ok := hit.Fields["_source"]; ok {
 			if data, ok := src.([]byte); ok {
-				json.Unmarshal(data, &doc)
+				if err := json.Unmarshal(data, &doc); err != nil {
+					continue
+				}
 			}
 		}
 		messages = append(messages, &model.Message{
@@ -168,7 +172,9 @@ func (s *SearchService) IndexMessages(msgs []*model.Message) error {
 			Type:      msg.Type,
 			CreatedAt: msg.CreatedAt.Format(time.RFC3339),
 		}
-		batch.Index(doc.ID, doc)
+		if err := batch.Index(doc.ID, doc); err != nil {
+			return err
+		}
 	}
 	return s.index.Batch(batch)
 }
@@ -189,7 +195,9 @@ func (s *SearchService) Search(ctx context.Context, query string, page, pageSize
 // 辅助函数
 func parseInt64(s string) int64 {
 	var n int64
-	fmt.Sscanf(s, "%d", &n)
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
+		return 0
+	}
 	return n
 }
 
