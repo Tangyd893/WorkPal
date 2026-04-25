@@ -2,6 +2,17 @@
 
 基于 Go + React 的企业协作平台（仿飞书/钉钉），适合作为学习项目。
 
+## 项目进度总览
+
+| Phase | 内容 | 状态 |
+|-------|------|------|
+| Phase 1 | 基础骨架（注册登录 + JWT + PostgreSQL + Redis） | ✅ 完成 |
+| Phase 2 | IM 核心（WebSocket 私聊/群聊 + 已读回执 + 在线状态） | ✅ 完成 |
+| Phase 3 | 生产级扩展（Docker + CI/CD + 单测 + Bleve 搜索 + MinIO） | ✅ 完成 |
+| Phase 4 | 高级特性（云文档 Yjs · 音视频 WebRTC · 多因素认证） | 📋 待开发 |
+
+---
+
 ## 项目结构
 
 ```
@@ -11,110 +22,119 @@ WorkPal/
 │   ├── configs/            # 配置文件
 │   ├── deployments/        # Docker 部署配置
 │   ├── internal/           # 私有业务代码
-│   │   ├── common/        # 公共组件（错误/中间件/响应）
-│   │   ├── user/          # 用户模块
-│   │   ├── im/            # IM 即时通讯模块（WebSocket）
-│   │   ├── file/          # 文件存储模块（MinIO + 本地）
-│   │   ├── search/        # 搜索模块（Bleve 全文索引）
-│   │   └── org/           # 组织架构模块
-│   ├── pkg/                # 公共工具包（消息队列）
+│   │   ├── common/        # 公共组件（errors/middleware/response/pagination）
+│   │   ├── user/           # 用户模块（注册/登录/个人资料）
+│   │   ├── im/            # 即时通讯（WebSocket/会话/消息）
+│   │   ├── file/          # 文件存储（MinIO + 本地双模式）
+│   │   └── search/        # 全文搜索（Bleve 索引）
+│   ├── pkg/               # 公共工具（auth/JWT）
 │   ├── Makefile
 │   └── go.mod
 │
-├── frontend/               # React 18 前端
+├── frontend/              # React 18 前端
 │   ├── src/
-│   │   ├── api/           # Axios 封装
-│   │   ├── components/    # 公共组件
-│   │   ├── hooks/         # 自定义 Hook
-│   │   ├── pages/         # 页面
-│   │   └── styles/        # 全局样式
+│   │   ├── api/          # Axios 封装 + 搜索 API
+│   │   ├── components/   # 公共组件
+│   │   ├── hooks/        # 自定义 Hook（WebSocket/Zustand stores）
+│   │   ├── pages/        # 页面（Login/Register/Chat）
+│   │   └── stores/       # Zustand 状态管理
+│   ├── testing/          # E2E 测试（Playwright）
 │   ├── package.json
 │   └── vite.config.ts
 │
-└── docs/                   # 项目文档
+├── AI-DEVELOPMENT.md     # AI 开发踩坑记录
+└── README.md
 ```
+
+---
 
 ## 技术栈
 
 ### 后端
 
-- **语言**: Go 1.21+（Go 1.22.2 测试通过）
-- **框架**: Gin (HTTP) + gorilla/websocket
-- **数据库**: PostgreSQL 16
-- **缓存**: Redis 7
-- **消息队列**: Redis Streams
-- **全文搜索**: Bleve 全文索引（v1.0.14）
-- **文件存储**: MinIO + 本地文件系统双模式
-- **ORM**: GORM
-- **配置**: Viper
-- **监控**: Prometheus client_golang
+| 类别 | 技术 |
+|------|------|
+| 语言 | Go 1.22（测试通过） |
+| HTTP 框架 | Gin |
+| WebSocket | gorilla/websocket |
+| 数据库 | PostgreSQL 16 |
+| 缓存/消息队列 | Redis 7 + Redis Streams |
+| 全文搜索 | Bleve（嵌入，无需额外部署） |
+| 对象存储 | MinIO + 本地文件系统（双模式） |
+| ORM | GORM |
+| 配置 | Viper |
+| 单元测试 | testify + miniredis v2 |
 
 ### 前端
 
-- **框架**: React 18 + TypeScript
-- **构建**: Vite 5
-- **路由**: React Router v6
-- **状态**: Zustand
+| 类别 | 技术 |
+|------|------|
+| 框架 | React 18 + TypeScript |
+| 构建 | Vite 5 |
+| 路由 | React Router v6 |
+| 状态管理 | Zustand |
+| E2E 测试 | Playwright |
 
-## 开发阶段
+---
+
+## 开发进度
 
 ### Phase 1 - 基础骨架 ✅
-- 用户注册/登录（bcrypt + JWT）
-- 个人资料管理
-- PostgreSQL + Redis 连接
+
+- [x] 用户注册/登录（bcrypt + JWT）
+- [x] 个人资料管理
+- [x] PostgreSQL + Redis 连接
+- [x] 统一错误码体系（5位数 ABCDE 格式，HTTPStatus 内置）
 
 ### Phase 2 - IM 核心 ✅
-- WebSocket 长连接（gorilla/websocket）
-- 私聊/群聊会话管理
-- 消息发送/接收/历史
-- 已读回执
-- Redis 在线状态
+
+- [x] WebSocket 长连接（gorilla/websocket）
+- [x] 私聊/群聊会话管理
+- [x] 消息发送/接收/历史记录
+- [x] 消息已读回执（WebSocket TypeRead/TypeReadAll 广播）
+- [x] 聊天页面全文搜索（头部搜索框 + Bleve 后端）
+- [x] Redis 在线状态管理
 
 ### Phase 3 - 生产级扩展 ✅
-- Redis Streams 消息队列
-- Bleve 全文搜索（消息索引 + 搜索）
-- MinIO 对象存储 + 本地文件双模式
-- Prometheus 指标监控
-- 用户模糊搜索（PostgreSQL ILIKE）
-- Docker Compose 一键部署
-- GitHub Actions CI（lint + test -race + 前端类型检查）
-- 服务层单元测试覆盖（auth/message/conversation/presence + Hub 并发）
-- golangci-lint 代码质量检查
+
+- [x] Docker Compose 一键部署（PostgreSQL + Redis + MinIO）
+- [x] GitHub Actions CI（go build + golangci-lint + `go test -race` + tsc + vitest + playwright）
+- [x] 服务层单元测试（auth/message/conversation/presence + Hub 并发）
+- [x] golangci-lint 代码质量检查（0 warnings）
+- [x] Bleve 全文搜索（消息索引 + 搜索 API + 前端搜索框）
+- [x] MinIO 对象存储（文件上传/下载/列表 + 本地文件双模式）
+- [x] Prometheus 指标监控（`/metrics`）
+- [x] 用户模糊搜索（PostgreSQL ILIKE）
 
 ### Phase 4 - 高级特性（待开发）
-- 云文档协作编辑（Yjs）
-- 音视频通话（WebRTC）
-- 表情回复/线程消息
-- 多因素认证
+
+- [ ] 云文档协作编辑（Yjs）
+- [ ] 音视频通话（WebRTC）
+- [ ] 表情回复/线程消息
+- [ ] 多因素认证
+
+---
 
 ## 快速开始
 
 ### 环境要求
 
-- Go 1.21+
-- PostgreSQL 16
-- Redis 7
-- Node.js 18+
+- Go 1.22+ | Node.js 18+ | Docker
 
-### 1. 启动基础设施（Docker）
+### 1. 启动基础设施
 
 ```bash
-docker compose -f docker-compose.yaml up -d
+cd WorkPal
+docker compose up -d
 
-# 验证
-docker compose -f docker-compose.yaml ps
+# 验证服务
+docker compose ps
 ```
 
 ### 2. 启动后端
 
-支持 `CONFIG_PATH` 环境变量指定配置文件路径（默认从 server 二进制所在目录查找）：
-
 ```bash
 cd backend
-GOTOOLCHAIN=local go build ./cmd/server/
-./server
-
-# 或直接运行（自动查找 configs/config.yaml）
 GOTOOLCHAIN=local go run cmd/server/main.go
 
 # 服务启动在 http://localhost:8080
@@ -124,128 +144,148 @@ GOTOOLCHAIN=local go run cmd/server/main.go
 
 ```bash
 cd frontend
-pnpm install
-pnpm dev
+npm install
+npm run dev
 
 # 前端启动在 http://localhost:3000
 ```
 
+---
+
 ## 测试
 
-### 单元测试（Go）
+### 后端单元测试
 
 ```bash
 cd backend
-go test -race ./...           # 所有测试
-go test -race ./internal/im/service/...   # IM 模块
-go test -race ./internal/user/service/...  # 用户/认证模块
+
+# 全部测试（含数据竞争检测）
+go test -race ./...
+
+# 按模块运行
+go test -race ./internal/im/service/...
+go test -race ./internal/user/service/...
+go test -race ./internal/im/ws/...
+```
+
+**当前覆盖率**：auth_svc · message_svc · conversation_svc · presence_svc · Hub（并发 race 测试）
+
+### 前端类型检查
+
+```bash
+cd frontend
+npx tsc --noEmit       # 类型检查
+npm run build          # 生产构建
+npm run test           # Vitest 单元测试
 ```
 
 ### E2E 测试（Playwright）
 
 ```bash
-# 安装浏览器
-cd frontend && npx playwright install chromium
-
-# 运行测试
+cd frontend
+npx playwright install chromium
 node testing/e2e/playwright.mjs
 ```
 
-### 测试覆盖率
+### CI
 
-```bash
-cd backend
-go test -race -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out -o coverage.html
-open coverage.html
-```
+每次 PR/Push 自动运行：Go build · golangci-lint · `go test -race` · tsc · vitest · playwright e2e
 
-CI 已在每次 PR/Push 时自动运行（见 `.github/workflows/ci.yml`）。
+---
 
 ## API 路由
 
 ### 认证
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | POST | `/api/v1/auth/register` | 用户注册 | ❌ |
-| POST | `/api/v1/auth/login` | 用户登录 | ❌ |
+| POST | `/api/v1/auth/login` | 用户登录（返回 JWT） | ❌ |
 | GET | `/api/v1/users/me` | 当前用户信息 | ✅ |
 | PUT | `/api/v1/users/me` | 更新个人资料 | ✅ |
 
 ### 用户
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | GET | `/api/v1/users` | 用户列表（分页） | ✅ |
 | GET | `/api/v1/users/search?q=` | 模糊搜索用户 | ✅ |
 
 ### IM 会话
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| POST | `/api/v1/conversations` | 创建会话 | ✅ |
+| POST | `/api/v1/conversations` | 创建私聊/群聊 | ✅ |
 | GET | `/api/v1/conversations` | 会话列表 | ✅ |
 | GET | `/api/v1/conversations/:id` | 会话详情 | ✅ |
-| PUT | `/api/v1/conversations/:id` | 更新会话 | ✅ |
-| DELETE | `/api/v1/conversations/:id` | 解散会话 | ✅ |
+| PUT | `/api/v1/conversations/:id` | 更新会话（群名） | ✅ |
+| DELETE | `/api/v1/conversations/:id` | 解散会话（群主） | ✅ |
 | POST | `/api/v1/conversations/:id/members` | 添加成员 | ✅ |
 | DELETE | `/api/v1/conversations/:id/members/:uid` | 移除成员 | ✅ |
 
 ### 消息
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/api/v1/conversations/:id/messages` | 历史消息 | ✅ |
+| GET | `/api/v1/conversations/:id/messages` | 历史消息（分页） | ✅ |
 | POST | `/api/v1/conversations/:id/messages` | 发送消息（自动索引） | ✅ |
 | PUT | `/api/v1/messages/:id` | 编辑消息 | ✅ |
 | DELETE | `/api/v1/messages/:id` | 撤回消息 | ✅ |
 | POST | `/api/v1/conversations/:id/read-all` | 全部已读 | ✅ |
 
 ### 文件
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| POST | `/api/v1/files/upload` | 上传文件 | ✅ |
+| POST | `/api/v1/files/upload` | 上传文件（MinIO/本地） | ✅ |
 | GET | `/api/v1/files` | 用户文件列表 | ✅ |
 | GET | `/api/v1/files/:id` | 下载文件 | ✅ |
-| GET | `/api/v1/conversations/:id/files` | 会话文件 | ✅ |
+| GET | `/api/v1/conversations/:id/files` | 会话文件列表 | ✅ |
 
 ### 搜索
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
-| GET | `/api/v1/search/messages?q=` | 搜索消息（Bleve） | ✅ |
+| GET | `/api/v1/search/messages?q=&conv_id=&page=&page_size=` | 搜索消息（Bleve） | ✅ |
 
 ### 其他
+
 | 方法 | 路径 | 说明 | 认证 |
 |------|------|------|------|
 | GET | `/health` | 健康检查 | ❌ |
 | GET | `/metrics` | Prometheus 指标 | ❌ |
-| WSS | `/ws` | WebSocket | ✅ |
+| WS | `/ws?token=` | WebSocket（JWT 放入 query 参数） | ✅ |
+
+---
 
 ## Docker Compose 服务
 
-```bash
-# 启动所有服务
-docker compose -f docker-compose.yaml up -d
-
-# 服务端口
-PostgreSQL:  localhost:5432
-Redis:       localhost:6379
-MinIO API:   localhost:9000
-MinIO Console: localhost:9001
-后端 API:    localhost:8080
-前端:       localhost:3000 (开发模式)
 ```
+PostgreSQL:    localhost:5432  (DB: workpal, User/Pass: workpal/workpal123)
+Redis:         localhost:6379
+MinIO API:     localhost:9000  (Console: localhost:9001, User/Pass: workpal/workpal123)
+后端 API:      localhost:8080
+前端:          localhost:3000
+```
+
+---
 
 ## 配置说明
 
-主要配置文件：`backend/configs/config.yaml`
+配置文件：`backend/configs/config.yaml`
 
 ```yaml
 server:
   port: 8080
-  jwtSecret: "your-secret-key"
+  jwtSecret: "your-secret-key"       # 注意：YAML key 须为 camelCase
   jwtExpiryHours: 72
 
 database:
   host: "localhost"
   port: 5432
+  user: "workpal"
+  password: "workpal123"
+  dbname: "workpal"
 
 redis:
   host: "localhost"
@@ -266,37 +306,47 @@ search:
     index_path: "/tmp/workpal-search"
 ```
 
-## 监控系统
-
-Prometheus 指标端点：`GET /metrics`
-
-当前指标：
-- `http_requests_total` - HTTP 请求计数
-- `http_request_duration_seconds` - 请求延迟
-- `websocket_connections` - WebSocket 连接数
-- `messages_total` - 消息收发计数
+---
 
 ## Makefile 命令
 
 ```bash
-make deps      # 下载 Go 依赖
-make run       # 运行后端
-make build     # 编译二进制
+make deps        # 下载 Go 依赖
+make run         # 运行后端
+make build       # 编译二进制
 make docker-up   # 启动 Docker 服务
 make docker-down # 停止 Docker 服务
 ```
+
+---
 
 ## 编译验证
 
 ```bash
 # 后端
 cd backend
-GOTOOLCHAIN=local go build ./cmd/server/  && echo "✅ 后端编译通过"
+GOTOOLCHAIN=local go build ./cmd/server/ && echo "✅ 后端编译通过"
 
 # 前端
 cd frontend
-npm run build  && echo "✅ 前端编译通过"
+npm run build && echo "✅ 前端编译通过"
 ```
+
+---
+
+## 踩坑记录（AI-DEVELOPMENT.md）
+
+项目真实 AI 开发踩坑案例：
+
+- **并发代码 race**：AI 生成的 Hub，`clients` map 读写没有锁，`go test -race` 爆红 → 手工加 RWMutex
+- **viper YAML 映射**：YAML 用下划线（`jwt_secret`），Go struct 用 camelCase（`JWTSecret`），`mapstructure` 标签没加 → token 全部失效
+- **Zustand persist**：AI 把整个 store persist 导致 hydration race → 去掉 persist 中间件
+- **WS token 位置**：Gin 框架 Authorization header 被拦截，token 改放 query 参数 `?token=`
+- **errcheck 忽略**：搜索索引失败被 `_ =` 吞掉，测试跑不过
+
+详见 `AI-DEVELOPMENT.md`。
+
+---
 
 ## License
 
