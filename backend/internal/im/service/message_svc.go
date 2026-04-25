@@ -7,15 +7,29 @@ import (
 
 	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
-	"github.com/Tangyd893/WorkPal/backend/internal/im/repo"
 )
 
-type MessageService struct {
-	msgRepo *repo.MessageRepo
+// MessageRepository 接口，便于测试注入 mock
+type MessageRepository interface {
+	Create(ctx context.Context, msg *model.Message) error
+	GetByID(ctx context.Context, id int64) (*model.Message, error)
+	GetByConvID(ctx context.Context, convID int64, beforeID int64, limit int) ([]*model.Message, error)
+	Update(ctx context.Context, msg *model.Message) error
+	SoftDelete(ctx context.Context, msgID int64) error
+	CountUnread(ctx context.Context, convID, userID int64) (int64, error)
+	MarkRead(ctx context.Context, userID, convID int64) error
 }
 
-func NewMessageService(msgRepo *repo.MessageRepo) *MessageService {
+type MessageService struct {
+	msgRepo MessageRepository
+}
+
+func NewMessageService(msgRepo MessageRepository) *MessageService {
 	return &MessageService{msgRepo: msgRepo}
+}
+
+func newMessageService(msgRepo MessageRepository) *MessageService {
+	return NewMessageService(msgRepo)
 }
 
 // Send 发送消息（创建消息记录）

@@ -15,15 +15,29 @@ const (
 	presenceTimeoutSec  = 60 // 60秒无心跳视为离线
 )
 
-type PresenceService struct{}
+type PresenceService struct {
+	rdb *redis.Client // 可注入，nil 时使用全局 cache.Client()
+}
 
 func NewPresenceService() *PresenceService {
 	return &PresenceService{}
 }
 
+// NewPresenceServiceWithClient 注入 Redis 客户端（用于测试）
+func NewPresenceServiceWithClient(rdb *redis.Client) *PresenceService {
+	return &PresenceService{rdb: rdb}
+}
+
+func (s *PresenceService) client() *redis.Client {
+	if s.rdb != nil {
+		return s.rdb
+	}
+	return cache.Client()
+}
+
 // SetOnline 设置用户在线（心跳）
 func (s *PresenceService) SetOnline(ctx context.Context, userID int64) error {
-	rdb := cache.Client()
+	rdb := s.client()
 	now := float64(time.Now().Unix())
 
 	pipe := rdb.Pipeline()
@@ -35,7 +49,7 @@ func (s *PresenceService) SetOnline(ctx context.Context, userID int64) error {
 
 // SetOffline 设置用户离线
 func (s *PresenceService) SetOffline(ctx context.Context, userID int64) error {
-	rdb := cache.Client()
+	rdb := s.client()
 	key := fmt.Sprintf(presenceUserKeyFmt, userID)
 	pipe := rdb.Pipeline()
 	pipe.ZRem(ctx, presenceOnlineKey, userID)
@@ -46,7 +60,7 @@ func (s *PresenceService) SetOffline(ctx context.Context, userID int64) error {
 
 // IsOnline 检查用户是否在线
 func (s *PresenceService) IsOnline(ctx context.Context, userID int64) (bool, error) {
-	rdb := cache.Client()
+	rdb := s.client()
 	key := fmt.Sprintf(presenceUserKeyFmt, userID)
 	exists, err := rdb.Exists(ctx, key).Result()
 	return exists > 0, err
@@ -54,7 +68,7 @@ func (s *PresenceService) IsOnline(ctx context.Context, userID int64) (bool, err
 
 // GetOnlineUsers 获取所有在线用户ID
 func (s *PresenceService) GetOnlineUsers(ctx context.Context) ([]int64, error) {
-	rdb := cache.Client()
+	rdb := s.client()
 	now := time.Now().Unix()
 	cutoff := now - int64(presenceTimeoutSec)
 
@@ -84,7 +98,7 @@ func (s *PresenceService) GetOnlineUsers(ctx context.Context) ([]int64, error) {
 
 // CleanupInactive 清理不活跃用户（定期调用）
 func (s *PresenceService) CleanupInactive(ctx context.Context) error {
-	rdb := cache.Client()
+	rdb := s.client()
 	now := time.Now().Unix()
 	cutoff := now - int64(presenceTimeoutSec)
 	return rdb.ZRemRangeByScore(ctx, presenceOnlineKey, "0", fmt.Sprintf("%d", cutoff)).Err()

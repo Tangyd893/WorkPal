@@ -6,15 +6,33 @@ import (
 
 	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
-	"github.com/Tangyd893/WorkPal/backend/internal/im/repo"
 )
 
-type ConversationService struct {
-	convRepo *repo.ConversationRepo
+// ConversationRepository 接口，便于测试注入 mock
+type ConversationRepository interface {
+	Create(ctx context.Context, conv *model.Conversation) error
+	GetByID(ctx context.Context, id int64) (*model.Conversation, error)
+	FindPrivateConv(ctx context.Context, uid1, uid2 int64) (*model.Conversation, error)
+	AddMember(ctx context.Context, m *model.ConversationMember) error
+	IsMember(ctx context.Context, convID, userID int64) (bool, error)
+	RemoveMember(ctx context.Context, convID, userID int64) error
+	GetMembers(ctx context.Context, convID int64) ([]int64, error)
+	ListByUser(ctx context.Context, userID int64, offset, limit int) ([]*model.Conversation, error)
+	CountByUser(ctx context.Context, userID int64) (int64, error)
+	Update(ctx context.Context, conv *model.Conversation) error
+	Delete(ctx context.Context, convID int64) error
 }
 
-func NewConversationService(convRepo *repo.ConversationRepo) *ConversationService {
+type ConversationService struct {
+	convRepo ConversationRepository
+}
+
+func NewConversationService(convRepo ConversationRepository) *ConversationService {
 	return &ConversationService{convRepo: convRepo}
+}
+
+func newConversationService(convRepo ConversationRepository) *ConversationService {
+	return NewConversationService(convRepo)
 }
 
 // CreatePrivateConv 创建或获取私聊会话
