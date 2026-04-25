@@ -19,6 +19,10 @@ func SetSecret(secret string) {
 	jwtSecret = []byte(secret)
 }
 
+func GetSecret() string {
+	return string(jwtSecret)
+}
+
 // GenerateToken 生成 JWT Token
 func GenerateToken(userID int64, username string, expiryHours int) (string, error) {
 	claims := Claims{

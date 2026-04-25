@@ -1,6 +1,20 @@
 import axios from 'axios'
 import { useAuthStore } from '../hooks/useAuthStore'
 
+const STORAGE_KEY = 'workpal-auth'
+
+// Read token directly from localStorage to avoid Zustand hydration timing issues
+const getStoredToken = (): string | null => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      return parsed.token || null
+    }
+  } catch {}
+  return null
+}
+
 const request = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,
@@ -8,7 +22,7 @@ const request = axios.create({
 
 // 请求拦截器：注入 Token
 request.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token
+  const token = getStoredToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }

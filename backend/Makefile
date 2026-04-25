@@ -8,7 +8,7 @@ GOMOD=$(GOCMD) mod
 BINARY=server
 
 # Docker
-DC=docker compose -f deployments/docker/docker-compose.yaml
+DC=docker compose -f ../docker-compose.yaml
 
 deps:
 	$(GOMOD) download

@@ -40,7 +40,7 @@ export default function ChatPage() {
   const loadConversations = async () => {
     try {
       const res = await request.get<any, any>('/conversations')
-      setConversations(res.data || [])
+      setConversations(Array.isArray(res) ? res : (res.items || []))
     } catch (err) {
       console.error('加载会话列表失败', err)
     }
@@ -108,7 +108,7 @@ export default function ChatPage() {
   const loadMessages = async (convID: number) => {
     try {
       const res = await request.get<any, any>(`/conversations/${convID}/messages`)
-      setMessages(convID, res.data || [])
+      setMessages(convID, Array.isArray(res) ? res : (res.data || []))
     } catch (err) {
       console.error('加载消息失败', err)
     }
@@ -129,7 +129,7 @@ export default function ChatPage() {
         type: 1,
         content: input.trim(),
       })
-      const msg: ChatMessage = res.data
+      const msg: ChatMessage = res
       addMessage(activeConvID, msg)
       setInput('')
     } catch (err) {
@@ -146,9 +146,9 @@ export default function ChatPage() {
           target_uid: parseInt(targetUID),
         })
         await loadConversations()
-        if (res.data?.id) {
-          setActiveConvID(res.data.id)
-          setMessages(res.data.id, [])
+        if (res?.id) {
+          setActiveConvID(res.id)
+          setMessages(res.id, [])
         }
       } else {
         const memberIDs = groupMembers.split(',').map(s => parseInt(s.trim())).filter(n => n > 0)
@@ -158,9 +158,9 @@ export default function ChatPage() {
           member_ids: memberIDs,
         })
         await loadConversations()
-        if (res.data?.id) {
-          setActiveConvID(res.data.id)
-          setMessages(res.data.id, [])
+        if (res?.id) {
+          setActiveConvID(res.id)
+          setMessages(res.id, [])
         }
       }
       setShowCreate(false)

@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 
 interface AuthState {
   token: string | null
@@ -9,18 +8,29 @@ interface AuthState {
   logout: () => void
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      token: null,
-      userId: null,
-      username: null,
-      setAuth: (token, userId, username) => set({ token, userId, username }),
-      logout: () => set({ token: null, userId: null, username: null }),
-    }),
-    { name: 'workpal-auth' }
-  )
-)
+const STORAGE_KEY = 'workpal-auth'
+
+// Helper to read persisted state
+const loadPersistedState: () => AuthState = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return { token: null, userId: null, username: null }
+}
+
+export const useAuthStore = create<AuthState>()((set) => ({
+  ...loadPersistedState(),
+  setAuth: (token, userId, username) => {
+    const state = { token, userId, username }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    set(state)
+  },
+  logout: () => {
+    localStorage.removeItem(STORAGE_KEY)
+    set({ token: null, userId: null, username: null })
+  },
+}))
 
 // WebSocket store
 interface WSState {

@@ -13,14 +13,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
-  const { setAuth } = useAuthStore()
+  const setAuth = useAuthStore((s) => s.setAuth)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const res = await request.post<any, any>('/auth/login', form)
+      const raw = await request.post('/auth/login', form)
+      // Backend wraps response in {code, message, data}, so token is at raw.data.token
+      const res = (raw as any).data?.token ? (raw as any).data : (raw as any)
+      if (!res.token) throw new Error('登录失败：未收到认证令牌')
       setAuth(res.token, res.user_id, res.username)
       navigate('/', { replace: true })
     } catch (err: any) {

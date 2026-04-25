@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"os/signal"
 	"syscall"
 
@@ -78,7 +79,14 @@ func main() {
 	// 1. 加载配置
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
-		configPath = "configs/config.yaml"
+		// Use absolute path relative to the server binary location
+		execPath, err := os.Executable()
+		if err == nil {
+			baseDir := filepath.Dir(execPath)
+			configPath = filepath.Join(baseDir, "configs", "config.yaml")
+		} else {
+			configPath = "configs/config.yaml"
+		}
 	}
 
 	cfg, err := config.Load(configPath)
@@ -251,14 +259,18 @@ func main() {
 	// WebSocket 端点
 	wsHandler := imHandler.NewWebSocketHandler(hub)
 	r.GET("/ws", func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		var tokenStr string
+		// 优先从 query token 读（WebSocket 无法自定义 header）
+		if t := c.Query("token"); t != "" {
+			tokenStr = t
+		} else if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+			tokenStr = authHeader
+			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+				tokenStr = authHeader[7:]
+			}
+		} else {
 			c.JSON(401, gin.H{"error": "missing token"})
 			return
-		}
-		tokenStr := authHeader
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			tokenStr = authHeader[7:]
 		}
 		claims, err := auth.ParseToken(tokenStr)
 		if err != nil {
@@ -268,6 +280,7 @@ func main() {
 		c.Set("userID", claims.UserID)
 		wsHandler.Handle(c)
 	})
+
 
 	// 10. 启动服务器
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)

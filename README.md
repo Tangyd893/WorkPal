@@ -96,21 +96,22 @@ WorkPal/
 ### 1. 启动基础设施（Docker）
 
 ```bash
-cd backend/deployments/docker
-docker compose up -d
+docker compose -f docker-compose.yaml up -d
 
 # 验证
-docker compose ps
+docker compose -f docker-compose.yaml ps
 ```
 
 ### 2. 启动后端
+
+支持 `CONFIG_PATH` 环境变量指定配置文件路径（默认从 server 二进制所在目录查找）：
 
 ```bash
 cd backend
 GOTOOLCHAIN=local go build ./cmd/server/
 ./server
 
-# 或直接运行
+# 或直接运行（自动查找 configs/config.yaml）
 GOTOOLCHAIN=local go run cmd/server/main.go
 
 # 服务启动在 http://localhost:8080
@@ -186,8 +187,7 @@ pnpm dev
 
 ```bash
 # 启动所有服务
-cd backend/deployments/docker
-docker compose up -d
+docker compose -f docker-compose.yaml up -d
 
 # 服务端口
 PostgreSQL:  localhost:5432
@@ -205,8 +205,8 @@ MinIO Console: localhost:9001
 ```yaml
 server:
   port: 8080
-  jwt_secret: "your-secret-key"
-  jwt_expiry_hours: 72
+  jwtSecret: "your-secret-key"
+  jwtExpiryHours: 72
 
 database:
   host: "localhost"

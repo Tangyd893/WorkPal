@@ -1,8 +1,8 @@
 server:
   port: 8080
   mode: debug  # debug / release
-  jwt_secret: "workpal-secret-change-in-production"
-  jwt_expiry_hours: 72
+  jwtSecret: "workpal-secret-change-in-production"
+  jwtExpiryHours: 72
 
 database:
   host: "localhost"
