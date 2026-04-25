@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore, useConvStore, useWSStore, ChatMessage, Conversation } from '../hooks/useAuthStore'
-import request from '../api/request'
+import request, { searchMessages } from '../api/request'
 
 // WebSocket 消息格式
 interface WSMessage {
@@ -28,6 +28,9 @@ export default function ChatPage() {
   const [targetUID, setTargetUID] = useState('')
   const [groupName, setGroupName] = useState('')
   const [groupMembers, setGroupMembers] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<ChatMessage[]>([])
+  const [searching, setSearching] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
@@ -116,12 +119,29 @@ export default function ChatPage() {
 
   const handleSelectConv = (conv: Conversation) => {
     setActiveConvID(conv.id)
+    setSearchQuery('')
+    setSearchResults([])
     if (!messages[conv.id]) {
       loadMessages(conv.id)
     }
   }
 
   // 发送消息
+  // 搜索消息
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!searchQuery.trim()) return
+    setSearching(true)
+    try {
+      const res = await searchMessages(searchQuery, activeConvID || undefined)
+      setSearchResults(res.data || [])
+    } catch (err) {
+      console.error('搜索失败', err)
+    } finally {
+      setSearching(false)
+    }
+  }
+
   const handleSend = async () => {
     if (!input.trim() || !activeConvID) return
     try {
@@ -172,7 +192,9 @@ export default function ChatPage() {
     }
   }
 
-  const currentMessages = activeConvID ? (messages[activeConvID] || []) : []
+  const currentMessages = searchQuery && searchResults.length > 0
+    ? searchResults
+    : activeConvID ? (messages[activeConvID] || []) : []
   const currentConv = conversations.find(c => c.id === activeConvID)
 
   return (
@@ -270,14 +292,36 @@ export default function ChatPage() {
           {activeConvID && currentConv ? (
             <>
               {/* 聊天头部 */}
-              <div style={{ padding: '12px 20px', background: 'white', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center' }}>
-                <span style={{ fontWeight: 600 }}>
+              <div style={{ padding: '10px 20px', background: 'white', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontWeight: 600, flex: 1 }}>
                   {currentConv.type === 1 ? `与用户${currentConv.owner_id}的私聊` : (currentConv.name || '群聊')}
                 </span>
+                <form onSubmit={handleSearch} style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="搜索消息..."
+                    style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid #e5e7eb', fontSize: 13 }}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => { setSearchQuery(''); setSearchResults([]) }}
+                      style={{ padding: '4px 8px', fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 4, background: '#f5f5f5' }}
+                    >
+                      取消
+                    </button>
+                  )}
+                </form>
               </div>
 
               {/* 消息区 */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {searching && <div style={{ textAlign: 'center', color: '#999', padding: 12 }}>搜索中...</div>}
+                {searchQuery && searchResults.length === 0 && !searching && (
+                  <div style={{ textAlign: 'center', color: '#999', padding: 12 }}>未找到相关消息</div>
+                )}
                 {currentMessages.map((msg, idx) => (
                   <div
                     key={msg.id || idx}

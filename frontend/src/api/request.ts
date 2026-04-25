@@ -38,4 +38,10 @@ request.interceptors.response.use(
   }
 )
 
+// 搜索消息
+export const searchMessages = (q: string, convID?: number, page = 1, pageSize = 20) =>
+  request.get<any, any>('/search/messages', {
+    params: { q, conv_id: convID, page, page_size: pageSize },
+  })
+
 export default request

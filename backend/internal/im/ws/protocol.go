@@ -13,6 +13,8 @@ const (
 	TypePing     = "ping"      // 心跳
 	TypePong     = "pong"      // 心跳响应
 	TypeError    = "error"     // 错误
+	TypeRead     = "read"      // 已读回执
+	TypeReadAll  = "read_all"  // 全部已读
 )
 
 // WSMessage WebSocket 消息格式
@@ -76,5 +78,22 @@ func NewErrorMsg(msg string) *WSMessage {
 	return &WSMessage{
 		Type:    TypeError,
 		Content: msg,
+	}
+}
+
+// NewReadMsg 创建已读回执
+func NewReadMsg(convID int64, lastReadMsgID int64) *WSMessage {
+	return &WSMessage{
+		Type:    TypeRead,
+		ConvID:  convID,
+		Seq:     lastReadMsgID,
+	}
+}
+
+// NewReadAllMsg 创建全部已读回执
+func NewReadAllMsg(convID int64) *WSMessage {
+	return &WSMessage{
+		Type:   TypeReadAll,
+		ConvID: convID,
 	}
 }

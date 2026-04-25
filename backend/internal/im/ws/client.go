@@ -16,22 +16,20 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // 开发环境允许所有 origin
+		return true
 	},
 }
 
-// Client 单个 WebSocket 客户端连接
 type Client struct {
-	UserID   int64                // 用户 ID
-	Conn     *websocket.Conn      // WebSocket 连接
-	Hub      *Hub                 // Hub 引用
-	SendCh   chan []byte          // 发送队列
+	UserID   int64
+	Conn     *websocket.Conn
+	Hub      *Hub
+	SendCh   chan []byte
 	done     chan struct{}
 	doneOnce sync.Once
 	mu       sync.Mutex
 }
 
-// NewClient 创建客户端
 func NewClient(userID int64, conn *websocket.Conn, hub *Hub) *Client {
 	return &Client{
 		UserID: userID,
@@ -42,22 +40,13 @@ func NewClient(userID int64, conn *websocket.Conn, hub *Hub) *Client {
 	}
 }
 
-// Run 启动客户端读写循环
 func (c *Client) Run(ctx context.Context) {
-	// 注册到 Hub
 	c.Hub.Register(c)
-
-	// 启动读 goroutine
 	go c.readLoop(ctx)
-
-	// 启动写 goroutine
 	go c.writeLoop()
-
-	// 启动发送队列消费
 	go c.sendLoop()
 }
 
-// readLoop 读取客户端消息
 func (c *Client) readLoop(ctx context.Context) {
 	defer func() {
 		c.cleanup()
@@ -81,7 +70,6 @@ func (c *Client) readLoop(ctx context.Context) {
 	}
 }
 
-// writeLoop 从 SendCh 发送消息到客户端
 func (c *Client) writeLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -91,11 +79,11 @@ func (c *Client) writeLoop() {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			// 发送 ping
 			c.mu.Lock()
 			if c.Conn != nil {
 				if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 					c.cleanup()
+					c.mu.Unlock()
 					return
 				}
 			}
@@ -117,16 +105,13 @@ func (c *Client) writeLoop() {
 	}
 }
 
-// sendLoop 消费发送队列
 func (c *Client) sendLoop() {
 	for {
 		select {
 		case <-c.done:
 			return
 		case msg := <-c.SendCh:
-			// SendCh 有缓冲，写入即可
 			if len(c.SendCh) == 0 {
-				// channel 有空间，直接发
 				select {
 				case c.SendCh <- msg:
 				default:
@@ -136,7 +121,6 @@ func (c *Client) sendLoop() {
 	}
 }
 
-// handleMessage 处理收到的消息
 func (c *Client) handleMessage(data []byte) {
 	msg, err := Unmarshal(data)
 	if err != nil {
@@ -149,83 +133,90 @@ func (c *Client) handleMessage(data []byte) {
 		c.handleChat(msg)
 	case TypePing:
 		c.handlePing()
+	case TypeRead:
+		c.handleRead(msg)
+	case TypeReadAll:
+		c.handleReadAll(msg)
 	default:
 		c.SendError("unknown message type: " + msg.Type)
 	}
 }
 
-// handleChat 处理聊天消息
 func (c *Client) handleChat(msg *WSMessage) {
-	// msg.To 是目标（user_id 或 conv_id）
-	// 根据 msg.ConvID 判断是否是会话 ID
 	convID := msg.ConvID
 	// 私聊时 ConvID=0，To 字段是对方 user_id：
-	// TODO: 私聊路由需业务层处理，Hub 这里只做占位，未来收到私聊消息时
-	// 应查询会话关系后再路由，而非直接广播到 ConvID=0
+	// TODO: 私聊路由需业务层处理，Hub 这里只做占位
 
-	// 将消息广播到会话房间
 	if convID > 0 {
 		wsData, _ := msg.Marshal()
 		c.Hub.BroadcastToRoom(convID, c.UserID, wsData, c)
-		// 发送 ACK
 		ack := NewAckMsg(msg.Seq)
 		ackData, _ := ack.Marshal()
 		c.Send(ackData)
 	}
 }
 
-// handlePing 处理心跳
 func (c *Client) handlePing() {
 	pong := &WSMessage{Type: TypePong}
 	data, _ := pong.Marshal()
 	c.Send(data)
 }
 
-// Send 发送消息到客户端
+// handleRead 处理已读回执（用户阅读消息后主动发送）
+func (c *Client) handleRead(msg *WSMessage) {
+	if msg.ConvID <= 0 {
+		return
+	}
+	readData, _ := msg.Marshal()
+	// 广播给房间内所有其他成员，告知谁已读了哪条消息
+	c.Hub.BroadcastToRoom(msg.ConvID, c.UserID, readData, c)
+}
+
+// handleReadAll 处理全部已读（用户打开会话时告知全部已读）
+func (c *Client) handleReadAll(msg *WSMessage) {
+	if msg.ConvID <= 0 {
+		return
+	}
+	readAllData, _ := msg.Marshal()
+	c.Hub.BroadcastToRoom(msg.ConvID, c.UserID, readAllData, c)
+}
+
 func (c *Client) Send(data []byte) {
 	select {
 	case c.SendCh <- data:
 	default:
-		// channel 满了，丢弃
 		log.Printf("[WS] 发送队列已满 userID=%d", c.UserID)
 	}
 }
 
-// SendError 发送错误消息
 func (c *Client) SendError(text string) {
 	err := NewErrorMsg(text)
 	data, _ := err.Marshal()
 	c.Send(data)
 }
 
-// Close 关闭连接
 func (c *Client) Close() {
 	c.cleanup()
 }
 
-// cleanup 清理资源
 func (c *Client) cleanup() {
 	c.doneOnce.Do(func() {
 		close(c.done)
 		c.Hub.Unregister(c)
-
 		c.mu.Lock()
 		if c.Conn != nil {
 			c.Conn.Close()
 			c.Conn = nil
 		}
 		c.mu.Unlock()
-
 		close(c.SendCh)
 	})
 }
 
-// GetHub 获取全局 Hub 实例（通过包级别变量）
 var defaultHub *Hub
 var hubOnce sync.Once
 var hubMu sync.Mutex
 
-// InitHub 初始化全局 Hub
 func InitHub() *Hub {
 	hubMu.Lock()
 	defer hubMu.Unlock()
@@ -236,35 +227,28 @@ func InitHub() *Hub {
 	return defaultHub
 }
 
-// GetHub 获取全局 Hub
 func GetHub() *Hub {
 	hubMu.Lock()
 	defer hubMu.Unlock()
 	return defaultHub
 }
 
-// UpgradeToWebSocket 将 HTTP 连接升级为 WebSocket
 func UpgradeToWebSocket(w http.ResponseWriter, r *http.Request, userID int64) (*websocket.Conn, error) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return nil, err
 	}
-
 	hub := GetHub()
 	if hub == nil {
 		conn.Close()
 		return nil, ErrHubNotInit
 	}
-
 	client := NewClient(userID, conn, hub)
 	client.Run(context.Background())
-
 	return conn, nil
 }
 
-// ParseTokenFromQuery 从 URL query 解析 token（简化版，实际应在 handler 层 JWT 验证后传入 userID）
 func ParseTokenFromQuery(u string) (int64, error) {
-	// 格式: /ws?token=xxx 或 /ws?user_id=123
 	if strings.HasPrefix(u, "/ws?") {
 		params := strings.TrimPrefix(u, "/ws?")
 		pairs := strings.Split(params, "&")

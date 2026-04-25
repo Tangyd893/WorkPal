@@ -82,7 +82,7 @@ WorkPal/
 - golangci-lint 代码质量检查
 
 ### Phase 4 - 高级特性（待开发）
-- 云文档协作编辑（OT 算法 / Yjs）
+- 云文档协作编辑（Yjs）
 - 音视频通话（WebRTC）
 - 表情回复/线程消息
 - 多因素认证
