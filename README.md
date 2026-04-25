@@ -125,10 +125,10 @@ WorkPal/
 
 ```bash
 cd WorkPal
-docker compose up -d
+docker compose -f docker/docker-compose.yaml up -d
 
 # 验证服务
-docker compose ps
+docker compose -f docker/docker-compose.yaml ps
 ```
 
 ### 2. 启动后端
