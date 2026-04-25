@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
@@ -55,7 +55,7 @@ func (h *MessageHandler) GetHistory(c *gin.Context) {
 		return
 	}
 	if !isMember {
-		response.Fail(c, errors.ErrForbidden)
+		response.Fail(c, apperrors.ErrPermissionDenied)
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *MessageHandler) Send(c *gin.Context) {
 		return
 	}
 	if !isMember {
-		response.Fail(c, errors.ErrForbidden)
+		response.Fail(c, apperrors.ErrPermissionDenied)
 		return
 	}
 

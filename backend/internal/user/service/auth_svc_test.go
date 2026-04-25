@@ -64,7 +64,6 @@ func (m *mockUserRepo) Update(ctx context.Context, user *model.User) error {
 	return nil
 }
 
-// Sentinel errors matching repo behavior
 var errUserAlreadyExists = apperrors.ErrUserAlreadyExists
 var errUserNotFound  = apperrors.ErrUserNotFound
 
@@ -97,7 +96,7 @@ func TestRegister(t *testing.T) {
 				Password: "password123",
 			},
 			wantErr: true,
-			errType: ErrUserAlreadyExists,
+			errType: apperrors.ErrUserAlreadyExists,
 		},
 	}
 
@@ -161,7 +160,7 @@ func TestLogin(t *testing.T) {
 				Password: "password",
 			},
 			wantErr: true,
-			errType: ErrInvalidPassword, // spec: user not found → invalid password error
+			errType: apperrors.ErrInvalidPassword, // spec: user not found → invalid password error
 		},
 		{
 			name: "密码错误",
@@ -170,7 +169,7 @@ func TestLogin(t *testing.T) {
 				Password: "wrong-password",
 			},
 			wantErr: true,
-			errType: ErrInvalidPassword,
+			errType: apperrors.ErrInvalidPassword,
 		},
 		{
 			name: "缺少用户名",

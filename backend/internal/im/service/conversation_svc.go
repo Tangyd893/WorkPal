@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 )
 
@@ -38,7 +38,7 @@ func newConversationService(convRepo ConversationRepository) *ConversationServic
 // CreatePrivateConv 创建或获取私聊会话
 func (s *ConversationService) CreatePrivateConv(ctx context.Context, userID, targetID int64) (*model.Conversation, error) {
 	if userID == targetID {
-		return nil, errors.New(40001, "不能和自己聊天")
+		return nil, apperrors.ErrCannotChatWithSelf
 	}
 
 	// 先查找是否已有私聊
@@ -127,7 +127,7 @@ func (s *ConversationService) Delete(ctx context.Context, convID, userID int64) 
 		return err
 	}
 	if conv.OwnerID != userID {
-		return errors.New(40301, "只有群主可以解散群聊")
+		return apperrors.ErrNotGroupOwner
 	}
 	return s.convRepo.Delete(ctx, convID)
 }
@@ -139,7 +139,7 @@ func (s *ConversationService) AddMember(ctx context.Context, convID, userID int6
 		return err
 	}
 	if ok {
-		return errors.New(40901, "用户已在群中")
+		return apperrors.ErrMemberAlreadyInConv
 	}
 	return s.convRepo.AddMember(ctx, &model.ConversationMember{ConvID: convID, UserID: userID, JoinedAt: time.Now()})
 }
@@ -151,7 +151,7 @@ func (s *ConversationService) RemoveMember(ctx context.Context, convID, userID i
 		return err
 	}
 	if conv.Type == model.ConversationTypePrivate {
-		return errors.New(40001, "私聊无法移除成员")
+		return apperrors.ErrPrivateChatImmutable
 	}
 	return s.convRepo.RemoveMember(ctx, convID, userID)
 }

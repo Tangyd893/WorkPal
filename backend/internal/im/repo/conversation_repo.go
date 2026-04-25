@@ -2,7 +2,6 @@ package repo
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
@@ -32,7 +31,7 @@ func (r *ConversationRepo) CreateWithTx(tx *gorm.DB, conv *model.Conversation) e
 func (r *ConversationRepo) GetByID(ctx context.Context, id int64) (*model.Conversation, error) {
 	var conv model.Conversation
 	if err := r.db.WithContext(ctx).First(&conv, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if apperrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperrors.ErrNotFound
 		}
 		return nil, err
@@ -53,7 +52,7 @@ func (r *ConversationRepo) FindPrivateConv(ctx context.Context, uid1, uid2 int64
 		Where("type = ? AND id IN (?)", model.ConversationTypePrivate, subQuery).
 		First(&conv).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if apperrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -152,7 +151,7 @@ func (r *ConversationRepo) GetLastMessage(ctx context.Context, convID int64) (*m
 		Order("created_at DESC").
 		First(&msg).Error
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if apperrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

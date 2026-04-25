@@ -174,7 +174,7 @@ func TestConversationService_Delete(t *testing.T) {
 		conv2, _ := svc.CreateGroup(ctx, "另一个群", 1, []int64{2})
 		err := svc.Delete(ctx, conv2.ID, 999)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "只有群主可以解散群聊")
+		assert.Contains(t, err.Error(), "只有群主可以执行此操作")
 	})
 }
 
@@ -192,7 +192,7 @@ func TestConversationService_AddMember(t *testing.T) {
 	t.Run("重复添加被拒绝", func(t *testing.T) {
 		err := svc.AddMember(ctx, conv.ID, 2)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "已在群中")
+		assert.Contains(t, err.Error(), "已在会话中")
 	})
 }
 
@@ -211,7 +211,7 @@ func TestConversationService_RemoveMember(t *testing.T) {
 		priv, _ := svc.CreatePrivateConv(ctx, 1, 2)
 		err := svc.RemoveMember(ctx, priv.ID, 2)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "私聊无法移除成员")
+		assert.Contains(t, err.Error(), "私聊无法操作成员")
 	})
 }
 

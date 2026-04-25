@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 )
 
@@ -35,7 +35,7 @@ func newMessageService(msgRepo MessageRepository) *MessageService {
 // Send 发送消息（创建消息记录）
 func (s *MessageService) Send(ctx context.Context, convID, senderID int64, msgType int8, content string, metadata map[string]interface{}, replyTo int64) (*model.Message, error) {
 	if content == "" && msgType != model.MessageTypeText {
-		return nil, errors.New(40001, "消息内容不能为空")
+		return nil, apperrors.ErrContentEmpty
 	}
 
 	metaJSON := ""
@@ -94,7 +94,7 @@ func (s *MessageService) Edit(ctx context.Context, msgID, senderID int64, conten
 		return nil, err
 	}
 	if msg.SenderID != senderID {
-		return nil, errors.New(40301, "只能编辑自己发送的消息")
+		return nil, apperrors.ErrCannotEditOthersMsg
 	}
 	msg.Content = content
 	msg.UpdatedAt = time.Now()
@@ -111,7 +111,7 @@ func (s *MessageService) Recall(ctx context.Context, msgID, senderID int64) erro
 		return err
 	}
 	if msg.SenderID != senderID {
-		return errors.New(40301, "只能撤回自己发送的消息")
+		return apperrors.ErrCannotRecallOthers
 	}
 	return s.msgRepo.SoftDelete(ctx, msgID)
 }

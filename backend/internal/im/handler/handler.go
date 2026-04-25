@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/pagination"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
@@ -100,7 +100,7 @@ func (h *ConversationHandler) Get(c *gin.Context) {
 		return
 	}
 	if !isMember {
-		response.Fail(c, errors.ErrForbidden)
+		response.Fail(c, apperrors.ErrPermissionDenied)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *ConversationHandler) Update(c *gin.Context) {
 		return
 	}
 	if conv.OwnerID != userID {
-		response.Fail(c, errors.ErrForbidden)
+		response.Fail(c, apperrors.ErrPermissionDenied)
 		return
 	}
 
@@ -188,7 +188,7 @@ func (h *ConversationHandler) AddMember(c *gin.Context) {
 		return
 	}
 	if !isMember {
-		response.Fail(c, errors.ErrForbidden)
+		response.Fail(c, apperrors.ErrPermissionDenied)
 		return
 	}
 
@@ -229,7 +229,7 @@ func (h *ConversationHandler) RemoveMember(c *gin.Context) {
 		return
 	}
 	if !isMember {
-		response.Fail(c, errors.ErrForbidden)
+		response.Fail(c, apperrors.ErrPermissionDenied)
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *ConversationHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func handleServiceErr(c *gin.Context, err error) {
-	if appErr, ok := err.(*errors.AppError); ok {
+	if appErr, ok := err.(*apperrors.AppError); ok {
 		response.Fail(c, appErr)
 		return
 	}

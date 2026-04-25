@@ -7,7 +7,7 @@ import (
 	"github.com/Tangyd893/WorkPal/backend/internal/user/service"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/pagination"
 
 	"github.com/gin-gonic/gin"
@@ -128,7 +128,7 @@ func (h *UserHandler) RegisterRoutes(rg *gin.RouterGroup) {
 
 // handleServiceErr 将 service 层错误转换为 HTTP 响应
 func handleServiceErr(c *gin.Context, err error) {
-	if appErr, ok := err.(*errors.AppError); ok {
+	if appErr, ok := err.(*apperrors.AppError); ok {
 		response.Fail(c, appErr)
 		return
 	}

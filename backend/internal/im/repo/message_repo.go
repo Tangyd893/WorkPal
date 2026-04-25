@@ -2,7 +2,6 @@ package repo
 
 import (
 	"context"
-	"errors"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
@@ -31,7 +30,7 @@ func (r *MessageRepo) CreateWithTx(tx *gorm.DB, msg *model.Message) error {
 func (r *MessageRepo) GetByID(ctx context.Context, id int64) (*model.Message, error) {
 	var msg model.Message
 	if err := r.db.WithContext(ctx).First(&msg, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if apperrors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperrors.ErrNotFound
 		}
 		return nil, err

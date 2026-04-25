@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"gorm.io/gorm"
 )
 
@@ -20,7 +20,7 @@ func (r *UserRepo) Create(ctx context.Context, user *model.User) error {
 	result := r.db.WithContext(ctx).Create(user)
 	if result.Error != nil {
 		if isDuplicateKey(result.Error) {
-			return errors.ErrUserAlreadyExists
+			return apperrors.ErrUserAlreadyExists
 		}
 		return result.Error
 	}
@@ -32,7 +32,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id int64) (*model.User, error) {
 	result := r.db.WithContext(ctx).First(&user, id)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
-			return nil, errors.ErrUserNotFound
+			return nil, apperrors.ErrUserNotFound
 		}
 		return nil, result.Error
 	}
@@ -44,7 +44,7 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*model.U
 	result := r.db.WithContext(ctx).Where("username = ?", username).First(&user)
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
-			return nil, errors.ErrUserNotFound
+			return nil, apperrors.ErrUserNotFound
 		}
 		return nil, result.Error
 	}

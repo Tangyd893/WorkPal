@@ -3,7 +3,7 @@ package response
 import (
 	"net/http"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,8 +38,8 @@ func SuccessPage(c *gin.Context, data interface{}, total int64, page, pageSize i
 	})
 }
 
-func Fail(c *gin.Context, err *errors.AppError) {
-	c.JSON(errToHTTP(err.Code), Response{
+func Fail(c *gin.Context, err *apperrors.AppError) {
+	c.JSON(err.HTTPStatus(), Response{
 		Code:    err.Code,
 		Message: err.Message,
 		Data:    nil,
@@ -52,21 +52,4 @@ func FailWithMessage(c *gin.Context, code int, msg string) {
 		Message: msg,
 		Data:    nil,
 	})
-}
-
-func errToHTTP(code int) int {
-	switch {
-	case code >= 40000 && code < 40100:
-		return http.StatusBadRequest
-	case code >= 40100 && code < 40200:
-		return http.StatusUnauthorized
-	case code >= 40300 && code < 40400:
-		return http.StatusForbidden
-	case code >= 40400 && code < 40500:
-		return http.StatusNotFound
-	case code >= 40900 && code < 41000:
-		return http.StatusConflict
-	default:
-		return http.StatusInternalServerError
-	}
 }

@@ -3,7 +3,7 @@ package middleware
 import (
 	"strings"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/Tangyd893/WorkPal/backend/pkg/auth"
 	"github.com/gin-gonic/gin"
@@ -14,7 +14,7 @@ func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			response.Fail(c, errors.ErrUnauthorized)
+			response.Fail(c, apperrors.ErrUnauthorized)
 			c.Abort()
 			return
 		}
