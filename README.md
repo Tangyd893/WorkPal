@@ -77,9 +77,12 @@ WorkPal/
 - Prometheus 指标监控
 - 用户模糊搜索（PostgreSQL ILIKE）
 - Docker Compose 一键部署
+- GitHub Actions CI（lint + test -race + 前端类型检查）
+- 服务层单元测试覆盖（auth/message/conversation/presence + Hub 并发）
+- golangci-lint 代码质量检查
 
 ### Phase 4 - 高级特性（待开发）
-- 云文档协作编辑（OT 算法）
+- 云文档协作编辑（OT 算法 / Yjs）
 - 音视频通话（WebRTC）
 - 表情回复/线程消息
 - 多因素认证
@@ -126,6 +129,38 @@ pnpm dev
 
 # 前端启动在 http://localhost:3000
 ```
+
+## 测试
+
+### 单元测试（Go）
+
+```bash
+cd backend
+go test -race ./...           # 所有测试
+go test -race ./internal/im/service/...   # IM 模块
+go test -race ./internal/user/service/...  # 用户/认证模块
+```
+
+### E2E 测试（Playwright）
+
+```bash
+# 安装浏览器
+cd frontend && npx playwright install chromium
+
+# 运行测试
+node testing/e2e/playwright.mjs
+```
+
+### 测试覆盖率
+
+```bash
+cd backend
+go test -race -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out -o coverage.html
+open coverage.html
+```
+
+CI 已在每次 PR/Push 时自动运行（见 `.github/workflows/ci.yml`）。
 
 ## API 路由
 

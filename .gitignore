@@ -37,3 +37,6 @@ dist/
 # Backend build
 backend/server
 backend/bin/
+test-results/
+coverage.out
+coverage.html

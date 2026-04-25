@@ -1,0 +1,53 @@
+[
+  {
+    "name": "Health check",
+    "method": "GET",
+    "path": "/health",
+    "expectStatus": 200
+  },
+  {
+    "name": "Register",
+    "method": "POST",
+    "path": "/api/v1/auth/register",
+    "body": {
+      "username": "testuser",
+      "password": "password123",
+      "nickname": "Test User"
+    },
+    "expectStatus": 200,
+    "expectBodyContains": ["code", "data"]
+  },
+  {
+    "name": "Login",
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "body": {
+      "username": "admin",
+      "password": "admin123"
+    },
+    "expectStatus": 200,
+    "expectBody": { "code": 0 },
+    "saveAs": "token",
+    "savePath": "data.token"
+  },
+  {
+    "name": "Get current user",
+    "method": "GET",
+    "path": "/api/v1/users/me",
+    "headers": {
+      "Authorization": "Bearer {{token}}"
+    },
+    "expectStatus": 200,
+    "expectBody": { "code": 0 }
+  },
+  {
+    "name": "Get conversations",
+    "method": "GET",
+    "path": "/api/v1/conversations",
+    "headers": {
+      "Authorization": "Bearer {{token}}"
+    },
+    "expectStatus": 200,
+    "expectBody": { "code": 0 }
+  }
+]
