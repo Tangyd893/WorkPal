@@ -100,3 +100,6 @@ func (r *MessageRepo) GetBySender(ctx context.Context, senderID int64, offset, l
 		Find(&msgs).Error
 	return msgs, err
 }
+
+// 包内哨兵错误
+var ErrMessageNotFound = apperrors.ErrMessageNotFound

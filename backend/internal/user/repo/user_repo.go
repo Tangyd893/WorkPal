@@ -104,3 +104,10 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+// 包内哨兵错误（用于测试和跨层判断）
+var (
+	ErrUserAlreadyExists = apperrors.ErrUserAlreadyExists
+	ErrUserNotFound      = apperrors.ErrUserNotFound
+	ErrDuplicateKey      = apperrors.ErrUserAlreadyExists
+)
