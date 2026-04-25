@@ -1,5 +1,4 @@
 import axios from 'axios'
-import { useAuthStore } from '../hooks/useAuthStore'
 
 const STORAGE_KEY = 'workpal-auth'
 
