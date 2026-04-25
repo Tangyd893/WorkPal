@@ -222,6 +222,7 @@ func main() {
 
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+	r.Use(middleware.CORS())
 
 	// 根路由
 	r.GET("/", func(c *gin.Context) {
@@ -232,9 +233,23 @@ func main() {
 		})
 	})
 
-	// 健康检查
+	// 健康检查（带 DB/Redis 连通性检测）
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		h := map[string]interface{}{"status": "ok", "components": map[string]string{}}
+
+		// Ping PostgreSQL
+		if sqlDB.Ping() != nil {
+			c.JSON(503, map[string]interface{}{"status": "degraded", "error": "postgres unreachable"})
+			return
+		}
+
+		// Ping Redis
+		if err := redisClient.Ping(c.Request.Context()).Err(); err != nil {
+			c.JSON(503, map[string]interface{}{"status": "degraded", "error": "redis unreachable"})
+			return
+		}
+
+		c.JSON(200, h)
 	})
 
 	// Prometheus 指标端点
@@ -292,10 +307,24 @@ func main() {
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		<-sigChan
 		log.Println("收到退出信号，正在关闭...")
+
+		// Graceful shutdown：停止接收新连接，等待现有连接关闭
+		if err := srv.Close(); err != nil {
+			log.Printf("HTTP 服务关闭: %v", err)
+		}
+
+		// 停止 Hub（关闭所有 WebSocket 连接）
+		hub.Stop()
+
+		// 关闭搜索服务
 		if searchService != nil {
 			searchService.Close()
 		}
+
+		// 关闭数据库连接
 		sqlDB.Close()
+
+		log.Println("所有资源已关闭")
 		os.Exit(0)
 	}()
 
