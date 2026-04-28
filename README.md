@@ -1,383 +1,363 @@
 # WorkPal
 
-基于 Go + React 的企业协作平台（仿飞书/钉钉），适合作为学习项目。
+WorkPal 是一个基于 Go + React 的协作/即时通讯学习项目，包含登录鉴权、会话、消息、文件、全文搜索和基础监控。
 
-## 项目进度总览
+这份 README 的启动步骤已按仓库当前代码实际验证过一次：在 **2026 年 4 月 28 日**，我实际启动了 Docker 依赖、后端、前端，并完成了“注册 -> 登录 -> 获取当前用户”的联调烟测。
 
-| Phase | 内容 | 状态 |
-|-------|------|------|
-| Phase 1 | 基础骨架（注册登录 + JWT + PostgreSQL + Redis） | ✅ 完成 |
-| Phase 2 | IM 核心（WebSocket 私聊/群聊 + 已读回执 + 在线状态） | ✅ 完成 |
-| Phase 3 | 生产级扩展（Docker + CI/CD + 单测 + Bleve 搜索 + MinIO） | ✅ 完成 |
-| Phase 4 | 高级特性（云文档 Yjs · 音视频 WebRTC · 多因素认证） | 📋 待开发 |
+## 运行环境
 
----
+- Go 1.22+
+- Node.js 18+
+- npm
+- Docker Desktop / Docker Engine
 
-## 项目结构
+建议先确认 Docker 已经真正启动完成：
 
-```
-WorkPal/
-├── backend/                 # Go 后端
-│   ├── cmd/server/         # 程序入口
-│   ├── configs/            # 配置文件（config.example.yaml 提供本地样例）
-│   ├── deployments/        # Docker 部署配置
-│   ├── internal/           # 私有业务代码
-│   │   ├── common/        # 公共组件（errors/middleware/response/pagination）
-│   │   ├── user/           # 用户模块（注册/登录/个人资料）
-│   │   ├── im/            # 即时通讯（WebSocket/会话/消息）
-│   │   ├── file/          # 文件存储（MinIO + 本地双模式）
-│   │   └── search/        # 全文搜索（Bleve 索引）
-│   ├── pkg/               # 公共工具（auth/JWT）
-│   ├── Makefile
-│   └── go.mod
-│
-├── frontend/              # React 18 前端
-│   ├── src/
-│   │   ├── api/          # Axios 封装 + 搜索 API
-│   │   ├── components/   # 公共组件
-│   │   ├── hooks/        # 自定义 Hook（WebSocket/Zustand stores）
-│   │   ├── pages/        # 页面（Login/Register/Chat）
-│   │   └── stores/       # Zustand 状态管理
-│   ├── testing/          # E2E 测试（Playwright）
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── AI-DEVELOPMENT.md     # AI 开发踩坑记录
-└── README.md
+```powershell
+docker version
 ```
 
----
+如果输出里只有 `Client` 没有 `Server`，说明 Docker 还没准备好。
 
-## 技术栈
+## 默认端口
 
-### 后端
-
-| 类别 | 技术 |
-|------|------|
-| 语言 | Go 1.22（测试通过） |
-| HTTP 框架 | Gin |
-| WebSocket | gorilla/websocket |
-| 数据库 | PostgreSQL 16 |
-| 缓存/消息队列 | Redis 7 + Redis Streams |
-| 全文搜索 | Bleve（嵌入，无需额外部署） |
-| 对象存储 | MinIO + 本地文件系统（双模式） |
-| ORM | GORM |
-| 配置 | Viper |
-| 单元测试 | testify + miniredis v2 |
-
-### 前端
-
-| 类别 | 技术 |
-|------|------|
-| 框架 | React 18 + TypeScript |
-| 构建 | Vite 5 |
-| 路由 | React Router v6 |
-| 状态管理 | Zustand |
-| E2E 测试 | Playwright |
-
-### DevOps / 基础设施
-
-| 类别 | 技术 |
-|------|------|
-| 容器化 | Docker Compose（PostgreSQL + Redis + MinIO） |
-| CI/CD | GitHub Actions（全流程自动化） |
-| 监控 | Prometheus（`/metrics`） |
-
----
-
-## 开发进度
-
-### Phase 1 - 基础骨架 ✅
-
-- [x] 用户注册/登录（bcrypt + JWT）
-- [x] 个人资料管理
-- [x] PostgreSQL + Redis 连接
-- [x] 统一错误码体系（5位数 ABCDE 格式，HTTPStatus 内置）
-
-### Phase 2 - IM 核心 ✅
-
-- [x] WebSocket 长连接（gorilla/websocket）
-- [x] 私聊/群聊会话管理
-- [x] 消息发送/接收/历史记录
-- [x] 消息已读回执（WebSocket TypeRead/TypeReadAll 广播）
-- [x] 聊天页面全文搜索（头部搜索框 + Bleve 后端）
-- [x] Redis 在线状态管理
-
-### Phase 3 - 生产级扩展 ✅
-
-- [x] Docker Compose 一键部署（PostgreSQL + Redis + MinIO）
-- [x] GitHub Actions CI（go build + golangci-lint + `go test -race` + tsc + vitest + playwright）
-- [x] 服务层单元测试（auth/message/conversation/presence + Hub 并发）
-- [x] golangci-lint 代码质量检查（0 warnings）
-- [x] Bleve 全文搜索（消息索引 + 搜索 API + 前端搜索框）
-- [x] MinIO 对象存储（文件上传/下载/列表 + 本地文件双模式）
-- [x] Prometheus 指标监控（`/metrics`）
-- [x] 用户模糊搜索（PostgreSQL ILIKE）
-
-### Phase 4 - 高级特性（待开发）
-
-- [ ] 云文档协作编辑（Yjs）
-- [ ] 音视频通话（WebRTC）
-- [ ] 表情回复/线程消息
-- [ ] 多因素认证
-
----
+| 服务 | 地址 | 说明 |
+|---|---|---|
+| 前端 | `http://localhost:3000` | Vite dev server |
+| 后端 | `http://localhost:8080` | Gin API |
+| 健康检查 | `http://localhost:8080/health` | 检查 PostgreSQL/Redis 连通性 |
+| PostgreSQL | `localhost:5432` | 用户/密码：`workpal / workpal123` |
+| Redis | `localhost:6379` | 默认无密码 |
+| MinIO API | `http://localhost:9000` | 对象存储 |
+| MinIO Console | `http://localhost:9001` | 用户/密码：`workpal / workpal123456` |
 
 ## 快速开始
 
-### 环境要求
+下面默认使用 **Windows PowerShell**。如果你在 macOS/Linux 上运行，把 `Copy-Item` 换成 `cp` 即可。
 
-- Go 1.22+ | Node.js 18+ | Docker
+### 1. 启动基础依赖
 
-### 1. 启动基础设施
+在仓库根目录执行：
 
-```bash
-cd WorkPal
+```powershell
 docker compose -f docker/docker-compose.yaml up -d
-
-# 验证服务
 docker compose -f docker/docker-compose.yaml ps
 ```
 
-### 2. 启动后端
+你应该能看到 `postgres`、`redis`、`minio` 三个服务。
 
-```bash
-cd backend
+如果这里失败，先不要继续启动后端；先解决 Docker 本身的问题。
 
-# 首次启动：复制样例配置并按需修改密码、端口和存储路径
-cp configs/config.example.yaml configs/config.yaml
+### 2. 准备后端配置
 
-GOTOOLCHAIN=local go run ./cmd/server
+后端会按下面的顺序找配置文件：
 
-# 服务启动在 http://localhost:8080
+1. `CONFIG_PATH` 指定的文件
+2. `backend/configs/config.yaml`
+3. `backend/configs/config.example.yaml`
+
+也就是说，**不复制配置文件也能直接跑**，因为仓库里已经有 `config.example.yaml`，并且我就是按这个路径实际启动成功的。
+
+如果你想改本地配置，先复制一份：
+
+```powershell
+Copy-Item backend\configs\config.example.yaml backend\configs\config.yaml
 ```
 
-### 3. 启动前端
+常见需要改的地方：
 
-```bash
+- `server.jwtSecret`
+- `database.*`
+- `redis.*`
+- `file.storeType`
+- `search.bleve.indexPath`
+
+默认样例配置使用本地 Docker 启动出来的 PostgreSQL / Redis / MinIO。
+
+### 3. 启动后端
+
+打开一个终端窗口：
+
+```powershell
+cd backend
+go run ./cmd/server
+```
+
+保持这个终端不要关。
+
+后端启动后，用另一个终端验证：
+
+```powershell
+Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
+Invoke-WebRequest http://localhost:8080/ -UseBasicParsing
+```
+
+预期：
+
+- `/health` 返回 `200`
+- `/` 返回类似下面的 JSON：
+
+```json
+{"name":"WorkPal","status":"running","version":"0.2.0"}
+```
+
+### 4. 启动前端
+
+再开一个终端窗口：
+
+```powershell
 cd frontend
 npm ci
 npm run dev
-
-# 前端启动在 http://localhost:3000
 ```
 
----
+启动后打开：
 
-## 测试
+```text
+http://localhost:3000
+```
 
-### 后端单元测试
+前端通过 Vite 代理把下面两类请求转发到后端：
 
-```bash
+- `/api/*` -> `http://localhost:8080`
+- `/ws` -> `ws://localhost:8080`
+
+所以本地开发时不需要单独处理跨域。
+
+### 5. 默认登录账号
+
+在默认开发配置下，后端启动时会自动确保一个默认管理员账号存在：
+
+- 用户名：`admin`
+- 密码：`admin123`
+
+这里的“默认开发配置”指的是：
+
+- `server.mode` 不是 `release`
+- 你按仓库默认的本地启动方式运行后端
+
+你可以先直接验证这组账号能否登录：
+
+```powershell
+$body = @{
+  username = "admin"
+  password = "admin123"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "http://localhost:8080/api/v1/auth/login" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+成功时返回体里的 `code` 应该是 `0`，并带有 `token`。
+
+### 6. 登录并开始调试
+
+浏览器打开：
+
+```text
+http://localhost:3000
+```
+
+优先使用默认管理员账号登录：
+
+- 用户名：`admin`
+- 密码：`admin123`
+
+登录成功后会进入聊天页。
+
+### 7. 可选：额外创建一个普通测试账号
+
+当前前端只有登录页，**没有注册页**。  
+如果你需要第二个账号做会话、搜索或联调测试，可以手动创建：
+
+```powershell
+$suffix = Get-Date -Format 'MMddHHmmss'
+$username = "debug$suffix"
+
+$body = @{
+  username = $username
+  password = "pass123456"
+  nickname = "Debug User"
+  email = "$username@example.com"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "http://localhost:8080/api/v1/auth/register" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+这个写法每次都会生成新的用户名和 email，适合重复调试。
+
+## 一次性联调自检
+
+如果你想快速确认“前端代理 + 后端 API + 数据库 + JWT”整条链路都通，可以在仓库根目录执行：
+
+```powershell
+$suffix = Get-Date -Format 'MMddHHmmss'
+$username = "codex$suffix"
+$password = "pass123456"
+$base = "http://localhost:3000/api/v1"
+
+$registerBody = @{
+  username = $username
+  password = $password
+  nickname = "Smoke Test"
+  email = "$username@example.com"
+} | ConvertTo-Json
+
+$register = Invoke-RestMethod `
+  -Uri "$base/auth/register" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $registerBody
+
+$loginBody = @{
+  username = $username
+  password = $password
+} | ConvertTo-Json
+
+$login = Invoke-RestMethod `
+  -Uri "$base/auth/login" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $loginBody
+
+$headers = @{
+  Authorization = "Bearer $($login.data.token)"
+}
+
+Invoke-RestMethod -Uri "$base/users/me" -Headers $headers
+```
+
+这条命令链我已经实际跑过，返回正常。
+
+## 常用开发命令
+
+### 后端
+
+```powershell
 cd backend
-
-# 全部单元测试
 go test ./...
-
-# 并发/数据竞争检测（建议在 Linux CI 或本机 race 环境运行）
 go test -race ./...
-
-# 按模块运行
-go test -race ./internal/im/service/...
-go test -race ./internal/user/service/...
-go test -race ./internal/im/ws/...
+go build ./cmd/server
 ```
 
-**当前覆盖率**：auth_svc · message_svc · conversation_svc · presence_svc · Hub（并发 race 测试）
+### 前端
 
-### 前端类型检查
-
-```bash
+```powershell
 cd frontend
-npx tsc --noEmit       # 类型检查
-npm run build          # 生产构建
-npm run test           # Vitest 单元测试
+npm test
+npm run build
 ```
 
-### E2E 测试（Playwright）
+### E2E 脚本
 
-```bash
+要求前后端都已经启动：
+
+```powershell
 cd frontend
 npx playwright install chromium
-node testing/e2e/playwright.mjs
+node ..\testing\e2e\playwright.mjs
 ```
 
-### CI
+说明：
 
-每次 PR/Push 自动运行：Go build · golangci-lint · `go test -race` · TypeScript 类型检查 · Vitest。E2E 脚本保留在 `testing/e2e`，需要前后端服务启动后手动运行。
+- `npx playwright install chromium` 第一次运行时执行一次即可
+- 这个脚本现在会自己创建临时测试账号，不再依赖不存在的默认管理员账号
 
----
+补充：
 
-## 当前实现说明
+- 当前数据库里的 `users.email` 是唯一索引
+- 如果你重复跑注册示例，**不要省略 email，也不要反复用同一个 email**
+- README 里的注册示例都已经改成“自动生成唯一 email”的写法
+- 默认管理员账号用于本地开发/验收最方便；如果你把 `server.mode` 改成 `release`，就不要再依赖它自动创建
 
-- HTTP API 使用统一响应结构 `{ code, message, data }`；非 0 业务码会返回对应 HTTP 状态，前端 Axios 会自动解包 `data`。
-- 会话消息搜索会按当前登录用户加入的会话过滤，避免全局索引跨会话泄露。
-- 文件上传、下载和会话文件列表会校验当前用户是否拥有该文件或属于对应会话。
-- WebSocket 连接会在握手后加入当前用户已有会话房间；聊天消息仍通过 HTTP API 持久化后广播，避免未落库的临时 WS 消息。
-- `config.yaml`、前端构建产物、TypeScript build info 和备用包管理器锁文件不提交到仓库。
+## 停止服务
 
----
+### 停止前后端
 
-## API 路由
+在各自终端里按 `Ctrl + C`。
 
-### 认证
+### 停止 Docker 依赖
 
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/api/v1/auth/register` | 用户注册 | ❌ |
-| POST | `/api/v1/auth/login` | 用户登录（返回 JWT） | ❌ |
-| GET | `/api/v1/users/me` | 当前用户信息 | ✅ |
-| PUT | `/api/v1/users/me` | 更新个人资料 | ✅ |
+回到仓库根目录：
 
-### 用户
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/api/v1/users` | 用户列表（分页） | ✅ |
-| GET | `/api/v1/users/search?q=` | 模糊搜索用户 | ✅ |
-
-### IM 会话
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/api/v1/conversations` | 创建私聊/群聊 | ✅ |
-| GET | `/api/v1/conversations` | 会话列表 | ✅ |
-| GET | `/api/v1/conversations/:id` | 会话详情 | ✅ |
-| PUT | `/api/v1/conversations/:id` | 更新会话（群名） | ✅ |
-| DELETE | `/api/v1/conversations/:id` | 解散会话（群主） | ✅ |
-| POST | `/api/v1/conversations/:id/members` | 添加成员 | ✅ |
-| DELETE | `/api/v1/conversations/:id/members/:uid` | 移除成员 | ✅ |
-
-### 消息
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/api/v1/conversations/:id/messages` | 历史消息（分页） | ✅ |
-| POST | `/api/v1/conversations/:id/messages` | 发送消息（自动索引） | ✅ |
-| PUT | `/api/v1/messages/:id` | 编辑消息 | ✅ |
-| DELETE | `/api/v1/messages/:id` | 撤回消息 | ✅ |
-| POST | `/api/v1/conversations/:id/read-all` | 全部已读 | ✅ |
-
-### 文件
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/api/v1/files/upload` | 上传文件（MinIO/本地） | ✅ |
-| GET | `/api/v1/files` | 用户文件列表 | ✅ |
-| GET | `/api/v1/files/:id` | 下载文件 | ✅ |
-| GET | `/api/v1/conversations/:id/files` | 会话文件列表 | ✅ |
-
-### 搜索
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/api/v1/search/messages?q=&conv_id=&page=&page_size=` | 搜索消息（Bleve） | ✅ |
-
-### 其他
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/health` | 健康检查 | ❌ |
-| GET | `/metrics` | Prometheus 指标 | ❌ |
-| WS | `/ws?token=` | WebSocket（JWT 放入 query 参数） | ✅ |
-
----
-
-## Docker Compose 服务
-
-```
-PostgreSQL:    localhost:5432  (DB: workpal, User/Pass: workpal/workpal123)
-Redis:         localhost:6379
-MinIO API:     localhost:9000  (Console: localhost:9001, User/Pass: workpal/workpal123)
-后端 API:      localhost:8080
-前端:          localhost:3000
+```powershell
+docker compose -f docker/docker-compose.yaml down
 ```
 
----
+## 常见问题
 
-## 配置说明
+### 1. `docker compose` 报错连不上 daemon
 
-配置文件：`backend/configs/config.yaml`。仓库提供 `backend/configs/config.example.yaml` 作为本地样例，真实配置文件默认不提交。未设置 `CONFIG_PATH` 时，后端会优先读取 `configs/config.yaml`，不存在时回退到 `configs/config.example.yaml`。
+先确认 Docker Desktop 已经完全启动，再执行：
 
-```yaml
-server:
-  port: 8080
-  mode: debug
-  jwtSecret: "your-secret-key"       # 生产环境必须替换
-  jwtExpiryHours: 72
-
-database:
-  host: "localhost"
-  port: 5432
-  user: "workpal"
-  password: "workpal123"
-  dbname: "workpal"
-  maxOpenConns: 25
-  maxIdleConns: 5
-
-redis:
-  host: "localhost"
-  port: 6379
-  streamsKey: "workpal:streams:messages"
-
-file:
-  storeType: "minio"   # minio / local
-  localBaseDir: "./uploads"
-  maxFileSizeMB: 50
-  minio:
-    endpoint: "localhost:9000"
-    accessKey: "workpal"
-    secretKey: "workpal123456"
-    bucket: "workpal"
-    useSSL: false
-
-search:
-  engine: "bleve"
-  bleve:
-    indexPath: "./data/search"
+```powershell
+docker version
 ```
 
----
+只有出现 `Server` 段后，再继续后续步骤。
 
-## Makefile 命令
+### 2. 后端起不来
 
-```bash
-make deps        # 下载 Go 依赖
-make run         # 运行后端
-make build       # 编译二进制
-make docker-up   # 启动 Docker 服务
-make docker-down # 停止 Docker 服务
+优先检查：
+
+- `5432` 是否被别的 PostgreSQL 占用
+- `6379` 是否被别的 Redis 占用
+- `backend/configs/config.yaml` 是否写错
+- Docker 里的 `postgres` / `redis` 是否真的 healthy
+
+可以先看：
+
+```powershell
+docker compose -f docker/docker-compose.yaml ps
+Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
 ```
 
----
+### 3. 前端能打开，但登录失败
 
-## 编译验证
+优先检查：
 
-```bash
-# 后端
-cd backend
-GOTOOLCHAIN=local go build ./cmd/server/ && echo "✅ 后端编译通过"
+- 你是否先通过注册 API 创建了账号
+- 后端是否还在运行
+- 浏览器里请求是否打到了 `http://localhost:3000/api/v1/...`
 
-# 前端
-cd frontend
-npm run build && echo "✅ 前端编译通过"
+### 4. 文件上传依赖 MinIO 吗
+
+默认样例配置是 `minio` 模式。  
+如果 MinIO 初始化失败，后端代码会回退到本地文件存储，但开发联调时还是建议把 MinIO 一起跑起来，避免行为和线上预期不一致。
+
+## 项目结构
+
+```text
+WorkPal/
+├─ backend/                 Go 后端
+│  ├─ cmd/server/           程序入口
+│  ├─ configs/              配置
+│  ├─ internal/             业务代码
+│  └─ pkg/                  公共工具
+├─ frontend/                React + Vite 前端
+│  ├─ src/api/              API 封装
+│  ├─ src/components/       组件
+│  ├─ src/hooks/            hooks / store
+│  ├─ src/pages/            页面
+│  └─ src/styles/           样式
+├─ docker/                  Docker Compose
+├─ testing/                 脚本和测试资源
+└─ docs/                    设计与分析文档
 ```
 
----
+## 补充说明
 
-## 踩坑记录（AI-DEVELOPMENT.md）
-
-项目真实 AI 开发踩坑案例：
-
-- **并发代码 race**：AI 生成的 Hub，`clients` map 读写没有锁，`go test -race` 爆红 → 手工加 RWMutex
-- **viper YAML 映射**：YAML 用下划线（`jwt_secret`），Go struct 用 camelCase（`JWTSecret`），`mapstructure` 标签没加 → token 全部失效
-- **Zustand persist**：AI 把整个 store persist 导致 hydration race → 去掉 persist 中间件
-- **WS token 位置**：Gin 框架 Authorization header 被拦截，token 改放 query 参数 `?token=`
-- **errcheck 忽略**：搜索索引失败被 `_ =` 吞掉，测试跑不过
-
-详见 `AI-DEVELOPMENT.md`。
-
----
+- 根 README 现在以“**从零启动并本地调试**”为目标编写。
+- 如果你只看某个子项目，请同时参考：
+  - [backend/README.md](backend/README.md)
+  - [frontend/README.md](frontend/README.md)
 
 ## License
 

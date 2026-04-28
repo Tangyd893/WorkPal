@@ -1,156 +1,147 @@
-# WorkPal
+# WorkPal Backend
 
-基于 Go 的企业协作平台（仿飞书/钉钉），适合作为学习项目。
+这是 WorkPal 的 Go 后端。
 
-## 技术栈
+如果你的目标是从零把整套项目跑起来，请优先看仓库根目录的 [README.md](../README.md)。  
+这份文档只补充后端独有的信息。
 
-- **语言**: Go 1.22+
-- **框架**: Gin (Web)
-- **数据库**: PostgreSQL 16
-- **缓存**: Redis 7
-- **WebSocket**: gorilla/websocket
-- **ORM**: GORM
-- **配置**: Viper
-- **监控**: Prometheus client_golang
-
-## 项目结构
-
-```
-WorkPal/
-├── cmd/
-│   └── server/main.go          # 程序入口
-├── configs/
-│   ├── config.go               # 配置加载器
-│   ├── config.example.yaml      # 本地开发样例配置
-│   └── config.yaml             # 本地真实配置（不提交）
-├── internal/
-│   ├── common/                 # 公共组件
-│   │   ├── errors/             # 统一错误定义
-│   │   ├── middleware/          # Gin 中间件（JWT/CORS/RequestID）
-│   │   ├── pagination/          # 分页工具
-│   │   └── response/           # 统一响应格式
-│   ├── user/                   # 用户模块
-│   │   ├── handler/            # HTTP Handler
-│   │   ├── service/            # 业务逻辑
-│   │   ├── repo/               # 数据访问层
-│   │   └── model/              # 数据模型
-│   ├── im/                     # IM 即时通讯模块
-│   ├── file/                   # 文件上传、下载和会话文件
-│   └── search/                 # Bleve 消息搜索
-├── pkg/
-│   └── auth/                   # JWT 认证工具
-├── deployments/
-│   └── docker/docker-compose.yaml
-├── Makefile
-└── README.md
-```
-
-## 快速开始
-
-### 前置条件
+## 环境要求
 
 - Go 1.22+
-- Docker & Docker Compose
+- Docker Desktop / Docker Engine
 
-### 1. 启动基础设施（数据库 + Redis）
+## 启动前依赖
 
-```bash
-make docker-up
+后端依赖：
+
+- PostgreSQL
+- Redis
+- MinIO
+
+推荐直接在仓库根目录启动：
+
+```powershell
+docker compose -f docker/docker-compose.yaml up -d
+docker compose -f docker/docker-compose.yaml ps
 ```
 
-### 2. 安装依赖
+## 配置文件
 
-```bash
-make deps
+后端按下面顺序读取配置：
+
+1. `CONFIG_PATH` 指向的文件
+2. `configs/config.yaml`
+3. `configs/config.example.yaml`
+
+所以直接运行时，即使你没有复制 `config.yaml`，也会回退到样例配置。
+
+如果要自定义本地配置：
+
+```powershell
+Copy-Item configs\config.example.yaml configs\config.yaml
 ```
 
-### 3. 运行服务
+默认样例配置适配仓库里的 Docker Compose：
 
-```bash
-cp configs/config.example.yaml configs/config.yaml
-make run
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+- MinIO: `localhost:9000`
+
+## 启动后端
+
+```powershell
+cd backend
+go run ./cmd/server
 ```
 
-服务启动在 `http://localhost:8080`
+启动后可验证：
 
-### 4. 运行测试
+```powershell
+Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
+Invoke-WebRequest http://localhost:8080/ -UseBasicParsing
+```
 
-```bash
+## 重要事实
+
+- 后端会在启动时自动执行 GORM `AutoMigrate`
+- `/health` 会同时检查 PostgreSQL 和 Redis
+- WebSocket 地址是 `/ws?token=...`
+- 在默认开发配置下，后端启动时会自动确保默认管理员账号存在：
+  - 用户名：`admin`
+  - 密码：`admin123`
+- 这条默认管理员逻辑仅适用于 `server.mode != release` 的本地开发/验收场景
+
+## 常用命令
+
+```powershell
+cd backend
 go test ./...
-
-# 可选：在支持 race detector 的环境运行
 go test -race ./...
+go build ./cmd/server
 ```
 
-## 当前实现说明
+## 可选的 Makefile
 
-- `CONFIG_PATH` 可指定配置文件；未设置时优先读 `configs/config.yaml`，不存在则回退到 `configs/config.example.yaml`。
-- HTTP API 使用统一响应 `{ code, message, data }`，失败响应会带对应 HTTP 状态码。
-- 文件上传、下载和会话文件列表会校验文件所有者或会话成员身份。
-- 消息搜索只返回当前用户已加入会话中的结果，避免跨会话泄露。
-- WebSocket 连接会加入用户已有会话房间；消息通过 HTTP API 持久化后广播。
-
-## API 路由
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/api/v1/auth/register` | 用户注册 | ❌ |
-| POST | `/api/v1/auth/login` | 用户登录 | ❌ |
-| GET | `/api/v1/users/me` | 获取当前用户 | ✅ |
-| PUT | `/api/v1/users/me` | 更新个人资料 | ✅ |
-| GET | `/api/v1/users` | 用户列表（分页） | ✅ |
-| GET | `/api/v1/users/search?q=` | 模糊搜索用户 | ✅ |
-| GET | `/api/v1/conversations` | 会话列表 | ✅ |
-| POST | `/api/v1/conversations/:id/messages` | 发送消息 | ✅ |
-| GET | `/api/v1/search/messages?q=` | 搜索可见消息 | ✅ |
-| POST | `/api/v1/files/upload` | 上传文件 | ✅ |
-| GET | `/api/v1/files/:id` | 下载文件 | ✅ |
-| GET | `/health` | 健康检查 | ❌ |
-| GET | `/metrics` | Prometheus 指标 | ❌ |
-
-## API 示例
+如果你的环境里有 `make`，也可以用：
 
 ```bash
-# 注册
-curl -X POST http://localhost:8080/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"123456","nickname":"测试用户"}'
-
-# 登录
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"123456"}'
-
-# 获取当前用户（需要 Token）
-curl http://localhost:8080/api/v1/users/me \
-  -H "Authorization: Bearer <token>"
+cd backend
+make deps
+make docker-up
+make run
+make test
+make lint
 ```
 
-## 开发指南
+注意：
 
-### 添加新的模块
+- `make docker-up` 依赖 Docker
+- 这个 Makefile 主要偏 Unix 风格；Windows 上更推荐直接用上面的 PowerShell 命令
 
-参考 `internal/user` 的四层结构：
+## 常见接口
 
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/health` | 健康检查 |
+| `GET` | `/metrics` | Prometheus 指标 |
+| `POST` | `/api/v1/auth/register` | 注册 |
+| `POST` | `/api/v1/auth/login` | 登录 |
+| `GET` | `/api/v1/users/me` | 当前用户 |
+| `WS` | `/ws?token=...` | WebSocket |
+
+## 默认管理员登录示例
+
+```powershell
+$body = @{
+  username = "admin"
+  password = "admin123"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "http://localhost:8080/api/v1/auth/login" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
 ```
-handler  →  service  →  repo  →  model
- (接口层)   (业务层)   (数据层)  (数据模型)
+
+## 可选：创建额外测试账号
+
+```powershell
+$suffix = Get-Date -Format 'MMddHHmmss'
+$username = "debug$suffix"
+
+$body = @{
+  username = $username
+  password = "pass123456"
+  nickname = "Debug User"
+  email = "$username@example.com"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "http://localhost:8080/api/v1/auth/register" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
 ```
 
-1. 在 `internal/` 下创建模块目录
-2. 定义 `model.go`（对应数据表结构）
-3. 定义 `repo.go`（数据库操作）
-4. 定义 `service.go`（业务逻辑）
-5. 定义 `handler.go`（HTTP 接口）
-6. 在 `main.go` 中初始化并注册路由
-
-### 代码规范
-
-```bash
-make lint   # 运行 golangci-lint
-make swag   # 生成 Swagger 文档
-```
-
-## License
-
-MIT
+建议每次调试都带一个新的 `email`，因为当前 `users.email` 是唯一索引。

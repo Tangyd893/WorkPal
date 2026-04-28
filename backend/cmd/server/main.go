@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	config "github.com/Tangyd893/WorkPal/backend/configs"
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	fileHandler "github.com/Tangyd893/WorkPal/backend/internal/file/handler"
 	fileModel "github.com/Tangyd893/WorkPal/backend/internal/file/model"
@@ -35,6 +36,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -69,6 +71,13 @@ var (
 			Help: "Total number of messages sent",
 		},
 	)
+)
+
+const (
+	defaultAdminUsername = "admin"
+	defaultAdminPassword = "admin123"
+	defaultAdminNickname = "Administrator"
+	defaultAdminEmail    = "admin@workpal.local"
 )
 
 func init() {
@@ -143,6 +152,12 @@ func main() {
 
 	// User 模块
 	userRepoInst := userRepo.NewUserRepo(db)
+	if cfg.Server.Mode != "release" {
+		if err := ensureDefaultAdmin(context.Background(), userRepoInst); err != nil {
+			log.Fatalf("failed to ensure default admin: %v", err)
+		}
+		log.Printf("default development admin ensured (username=%s, password=%s)", defaultAdminUsername, defaultAdminPassword)
+	}
 	authSvc := userService.NewAuthService(userRepoInst, cfg.Server.JWTExpiryHours)
 	userSvc := userService.NewUserService(userRepoInst)
 	userHdlr := userHandler.NewUserHandler(userSvc, authSvc)
@@ -356,4 +371,35 @@ func resolveConfigPath() string {
 		}
 	}
 	return filepath.Join("configs", "config.yaml")
+}
+
+func ensureDefaultAdmin(ctx context.Context, userRepoInst *userRepo.UserRepo) error {
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(defaultAdminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash default admin password: %w", err)
+	}
+
+	existingUser, err := userRepoInst.GetByUsername(ctx, defaultAdminUsername)
+	if err != nil {
+		if !apperrors.Is(err, apperrors.ErrUserNotFound) {
+			return err
+		}
+
+		return userRepoInst.Create(ctx, &model.User{
+			Username:     defaultAdminUsername,
+			PasswordHash: string(passwordHash),
+			Nickname:     defaultAdminNickname,
+			Email:        defaultAdminEmail,
+			Status:       1,
+		})
+	}
+
+	existingUser.PasswordHash = string(passwordHash)
+	existingUser.Nickname = defaultAdminNickname
+	existingUser.Status = 1
+	if existingUser.Email == "" {
+		existingUser.Email = defaultAdminEmail
+	}
+
+	return userRepoInst.Update(ctx, existingUser)
 }

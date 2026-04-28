@@ -42,7 +42,7 @@ help:
 	@echo "WorkPal Backend Makefile"
 	@echo ""
 	@echo "  make deps        - Download and tidy Go dependencies"
-	@echo "  make docker-up   - Start postgres and redis containers"
+	@echo "  make docker-up   - Start postgres, redis, and minio containers"
 	@echo "  make docker-down - Stop containers"
 	@echo "  make build      - Build server binary"
 	@echo "  make run        - Run server (requires docker-up first)"

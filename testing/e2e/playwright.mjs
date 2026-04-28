@@ -1,123 +1,141 @@
-import { chromium } from 'playwright';
+import { chromium } from '../../frontend/node_modules/playwright/index.mjs'
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const API_URL = process.env.API_URL || 'http://localhost:8080';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000'
+const API_URL = process.env.API_URL || 'http://localhost:8080'
 
-let browser;
-let page;
-let passed = 0;
-let failed = 0;
+let browser
+let page
+let passed = 0
+let failed = 0
 
 function assert(condition, message) {
   if (condition) {
-    console.log(`  ✅ ${message}`);
-    passed++;
+    console.log(`  OK  ${message}`)
+    passed++
   } else {
-    console.error(`  ❌ ${message}`);
-    failed++;
+    console.error(`  FAIL  ${message}`)
+    failed++
   }
 }
 
 async function setup() {
-  browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  page = await context.newPage();
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext()
+  page = await context.newPage()
 }
 
 async function teardown() {
-  if (browser) await browser.close();
+  if (browser) {
+    await browser.close()
+  }
 }
 
-async function testLoginPage() {
-  console.log('\n📋 测试：登录页面');
-  await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+async function createTestUser() {
+  const suffix = Date.now()
+  const username = `playwright_${suffix}`
+  const password = 'pass123456'
+  const email = `${username}@example.com`
 
-  // 检查页面标题或主要内容
-  const title = await page.title();
-  assert(title !== '', '页面标题存在');
+  const response = await page.request.post(`${API_URL}/api/v1/auth/register`, {
+    data: {
+      username,
+      password,
+      nickname: 'Playwright User',
+      email,
+    },
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
 
-  // 检查登录表单元素
-  const hasUsernameInput = await page.locator('input[type="text"], input[type="email"], input[placeholder*="用户"], input[placeholder*="username" i]').count() > 0;
-  const hasPasswordInput = await page.locator('input[type="password"]').count() > 0;
-  const hasSubmitButton = await page.locator('button[type="submit"]').count() > 0;
+  assert(response.status() === 200, `register API returns 200 (actual: ${response.status()})`)
 
-  assert(hasUsernameInput, '用户名输入框存在');
-  assert(hasPasswordInput, '密码输入框存在');
-  assert(hasSubmitButton, '提交按钮存在');
+  const body = await response.json()
+  assert(body.code === 0, 'register API returns code 0')
+
+  return { username, password }
 }
 
 async function testHealthEndpoint() {
-  console.log('\n📋 测试：健康检查接口');
+  console.log('\n[Test] health endpoint')
   try {
-    const resp = await page.request.get(`${API_URL}/health`);
-    assert(resp.status() === 200, `健康检查返回 200 (实际: ${resp.status()})`);
-    const body = await resp.json();
-    assert(body.code === 0 || body.status === 'ok', '健康检查返回正确格式');
-  } catch (e) {
-    assert(false, `健康检查失败: ${e.message}`);
-  }
-}
-
-async function testLoginAPI() {
-  console.log('\n📋 测试：登录 API');
-  try {
-    const resp = await page.request.post(`${API_URL}/api/v1/auth/login`, {
-      data: { username: 'admin', password: 'admin123' },
-      headers: { 'Content-Type': 'application/json' }
-    });
-    assert(resp.status() === 200 || resp.status() === 401, `登录接口可访问 (状态: ${resp.status()})`);
-  } catch (e) {
-    assert(false, `登录 API 失败: ${e.message}`);
-  }
-}
-
-async function testRegisterAPI() {
-  console.log('\n📋 测试：注册 API');
-  try {
-    const resp = await page.request.post(`${API_URL}/api/v1/auth/register`, {
-      data: { username: `testuser_${Date.now()}`, password: 'password123' },
-      headers: { 'Content-Type': 'application/json' }
-    });
-    assert(resp.status() === 200 || resp.status() === 409 || resp.status() === 400, `注册接口可访问 (状态: ${resp.status()})`);
-  } catch (e) {
-    assert(false, `注册 API 失败: ${e.message}`);
+    const response = await page.request.get(`${API_URL}/health`)
+    assert(response.status() === 200, `health endpoint returns 200 (actual: ${response.status()})`)
+    const body = await response.json()
+    assert(body.status === 'ok', 'health payload contains status=ok')
+  } catch (error) {
+    assert(false, `health endpoint failed: ${error.message}`)
   }
 }
 
 async function testMetricsEndpoint() {
-  console.log('\n📋 测试：Prometheus 监控接口');
+  console.log('\n[Test] metrics endpoint')
   try {
-    const resp = await page.request.get(`${API_URL}/metrics`);
-    assert(resp.status() === 200, `监控接口返回 200 (实际: ${resp.status()})`);
-    const text = await resp.text();
-    assert(text.includes('http_requests_total') || text.includes('# HELP'), '返回 Prometheus 指标格式');
-  } catch (e) {
-    assert(false, `监控接口失败: ${e.message}`);
+    const response = await page.request.get(`${API_URL}/metrics`)
+    assert(response.status() === 200, `metrics endpoint returns 200 (actual: ${response.status()})`)
+    const text = await response.text()
+    assert(text.includes('http_requests_total') || text.includes('# HELP'), 'metrics payload looks like Prometheus output')
+  } catch (error) {
+    assert(false, `metrics endpoint failed: ${error.message}`)
   }
+}
+
+async function testLoginAPI(credentials) {
+  console.log('\n[Test] login API')
+  try {
+    const response = await page.request.post(`${API_URL}/api/v1/auth/login`, {
+      data: credentials,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    assert(response.status() === 200, `login API returns 200 (actual: ${response.status()})`)
+    const body = await response.json()
+    assert(body.code === 0, 'login API returns code 0')
+    assert(Boolean(body.data?.token), 'login API returns a token')
+  } catch (error) {
+    assert(false, `login API failed: ${error.message}`)
+  }
+}
+
+async function testLoginPage() {
+  console.log('\n[Test] login page')
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+
+  const title = await page.title()
+  assert(title !== '', 'page title exists')
+
+  const hasUsernameInput = (await page.locator('input[type="text"], input[type="email"], #username').count()) > 0
+  const hasPasswordInput = (await page.locator('input[type="password"], #password').count()) > 0
+  const hasSubmitButton = (await page.locator('button[type="submit"]').count()) > 0
+
+  assert(hasUsernameInput, 'username input exists')
+  assert(hasPasswordInput, 'password input exists')
+  assert(hasSubmitButton, 'submit button exists')
 }
 
 async function run() {
-  console.log('🚀 WorkPal E2E 测试开始');
-  console.log(`   前端: ${BASE_URL}`);
-  console.log(`   后端: ${API_URL}`);
+  console.log('WorkPal E2E smoke test')
+  console.log(`  frontend: ${BASE_URL}`)
+  console.log(`  backend : ${API_URL}`)
 
   try {
-    await setup();
-    await testHealthEndpoint();
-    await testMetricsEndpoint();
-    await testLoginAPI();
-    await testRegisterAPI();
-    await testLoginPage();
-  } catch (e) {
-    console.error('测试过程出错:', e.message);
-    failed++;
+    await setup()
+    await testHealthEndpoint()
+    await testMetricsEndpoint()
+    const credentials = await createTestUser()
+    await testLoginAPI(credentials)
+    await testLoginPage()
+  } catch (error) {
+    console.error(`Unexpected test error: ${error.message}`)
+    failed++
   } finally {
-    await teardown();
+    await teardown()
   }
 
-  console.log(`\n${'='.repeat(50)}`);
-  console.log(`测试结果: ${passed} 通过, ${failed} 失败`);
-  process.exit(failed > 0 ? 1 : 0);
+  console.log(`\nResult: ${passed} passed, ${failed} failed`)
+  process.exit(failed > 0 ? 1 : 0)
 }
 
-run();
+run()

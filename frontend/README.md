@@ -1,65 +1,85 @@
-# WorkPal 前端
+# WorkPal Frontend
 
-React 18 + Vite + TypeScript 企业协作平台前端。
+这是 WorkPal 的 React + Vite 前端。
 
-## 技术栈
+如果你要从零启动整套项目，请优先看仓库根目录的 [README.md](../README.md)。  
+这里重点说明前端自己的启动方式和依赖关系。
 
-| 类别 | 技术 |
-|------|------|
-| 框架 | React 18 + TypeScript |
-| 构建 | Vite 5 |
-| 路由 | React Router v6 |
-| 状态管理 | Zustand（全局状态）+ React State（局部） |
-| HTTP | Axios |
-| 样式 | CSS（自定义变量，参考 antd 设计规范） |
+## 环境要求
 
-## 目录结构
+- Node.js 18+
+- npm
 
-```
-frontend/
-├── src/
-│   ├── api/           # Axios 封装，统一请求拦截
-│   ├── components/     # 公共组件（Layout 等）
-│   ├── hooks/         # 自定义 Hook（useAuthStore 等）
-│   ├── pages/         # 页面组件
-│   ├── styles/        # 全局样式
-│   ├── App.tsx        # 根组件
-│   └── main.tsx       # 入口
-├── index.html
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
+## 启动前提
 
-## 快速开始
+前端默认依赖：
 
-```bash
-# 安装依赖
+- 本地后端运行在 `http://localhost:8080`
+- Vite dev server 运行在 `http://localhost:3000`
+
+当前代理规则在 [vite.config.ts](vite.config.ts)：
+
+- `/api/*` -> `http://localhost:8080`
+- `/ws` -> `ws://localhost:8080`
+
+## 启动前端
+
+```powershell
+cd frontend
 npm ci
+npm run dev
+```
 
-# 开发模式
-npm run dev    # 启动在 http://localhost:3000
+启动后打开：
 
-# 构建生产版本
+```text
+http://localhost:3000
+```
+
+## 重要说明
+
+- 当前前端只有登录页，没有注册页
+- 在默认开发配置下，后端启动时会自动确保默认管理员账号存在：
+  - 用户名：`admin`
+  - 密码：`admin123`
+- 登录成功后会进入聊天页
+
+建议先直接用这组账号登录。
+
+如果你需要额外测试账号，再手动创建：
+
+```powershell
+$suffix = Get-Date -Format 'MMddHHmmss'
+$username = "debug$suffix"
+
+$body = @{
+  username = $username
+  password = "pass123456"
+  nickname = "Debug User"
+  email = "$username@example.com"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "http://localhost:8080/api/v1/auth/register" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+## 常用脚本
+
+```powershell
+cd frontend
+npm run dev
 npm run build
-
-# 单元测试
 npm test
 ```
 
-## 环境变量
+## 调试建议
 
-项目根目录创建 `.env.local`：
+先确认下面两件事再看前端问题：
 
-```env
-VITE_API_BASE_URL=/api/v1
-VITE_WS_URL=ws://localhost:8080/ws
-```
+1. `http://localhost:8080/health` 返回 200
+2. 你能用 `admin / admin123` 登录，或者已经手动创建了一个可登录账号
 
-## 接口代理
-
-Vite 配置了 `/api` 到后端 `localhost:8080` 的代理，开发环境无需处理跨域。
-
-## API 响应约定
-
-后端统一返回 `{ code, message, data }`。`src/api/request.ts` 会在 `code === 0` 时自动返回 `data`，非 0 时抛出错误；页面代码不需要再手动读取外层 `data`。
+如果后端没起来，前端页可以打开，但 API 请求和聊天功能一定不通。
