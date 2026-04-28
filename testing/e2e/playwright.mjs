@@ -3,6 +3,11 @@ import { chromium } from '../../frontend/node_modules/playwright/index.mjs'
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000'
 const API_URL = process.env.API_URL || 'http://localhost:8080'
 
+const seededAccounts = [
+  { username: 'admin', password: 'admin123' },
+  { username: 'emma.chen', password: 'workpal123' },
+]
+
 let browser
 let page
 let passed = 0
@@ -30,32 +35,6 @@ async function teardown() {
   }
 }
 
-async function createTestUser() {
-  const suffix = Date.now()
-  const username = `playwright_${suffix}`
-  const password = 'pass123456'
-  const email = `${username}@example.com`
-
-  const response = await page.request.post(`${API_URL}/api/v1/auth/register`, {
-    data: {
-      username,
-      password,
-      nickname: 'Playwright User',
-      email,
-    },
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  })
-
-  assert(response.status() === 200, `register API returns 200 (actual: ${response.status()})`)
-
-  const body = await response.json()
-  assert(body.code === 0, 'register API returns code 0')
-
-  return { username, password }
-}
-
 async function testHealthEndpoint() {
   console.log('\n[Test] health endpoint')
   try {
@@ -80,39 +59,63 @@ async function testMetricsEndpoint() {
   }
 }
 
-async function testLoginAPI(credentials) {
-  console.log('\n[Test] login API')
-  try {
-    const response = await page.request.post(`${API_URL}/api/v1/auth/login`, {
-      data: credentials,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+async function testSeededLoginsAPI() {
+  console.log('\n[Test] seeded login API')
 
-    assert(response.status() === 200, `login API returns 200 (actual: ${response.status()})`)
-    const body = await response.json()
-    assert(body.code === 0, 'login API returns code 0')
-    assert(Boolean(body.data?.token), 'login API returns a token')
-  } catch (error) {
-    assert(false, `login API failed: ${error.message}`)
+  for (const account of seededAccounts) {
+    try {
+      const response = await page.request.post(`${API_URL}/api/v1/auth/login`, {
+        data: account,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+
+      assert(response.status() === 200, `${account.username} login returns 200`)
+      const body = await response.json()
+      assert(body.code === 0, `${account.username} login returns code 0`)
+      assert(Boolean(body.data?.token), `${account.username} login returns a token`)
+    } catch (error) {
+      assert(false, `${account.username} login failed: ${error.message}`)
+    }
   }
 }
 
-async function testLoginPage() {
-  console.log('\n[Test] login page')
-  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+async function testWorkspaceUI() {
+  console.log('\n[Test] workspace UI')
 
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
   const title = await page.title()
   assert(title !== '', 'page title exists')
 
-  const hasUsernameInput = (await page.locator('input[type="text"], input[type="email"], #username').count()) > 0
-  const hasPasswordInput = (await page.locator('input[type="password"], #password').count()) > 0
-  const hasSubmitButton = (await page.locator('button[type="submit"]').count()) > 0
+  const usernameInput = page.locator('#username')
+  const passwordInput = page.locator('#password')
+  await usernameInput.fill('admin')
+  await passwordInput.fill('admin123')
+  await page.locator('button[type="submit"]').click()
 
-  assert(hasUsernameInput, 'username input exists')
-  assert(hasPasswordInput, 'password input exists')
-  assert(hasSubmitButton, 'submit button exists')
+  await page.waitForURL('**/workspace/overview', { timeout: 15000 })
+  assert(page.url().includes('/workspace/overview'), 'login redirects to workspace overview')
+
+  const navLabels = ['总览', '沟通', '任务', '日程', '文件', '通讯录']
+  for (const label of navLabels) {
+    const visible = (await page.getByRole('button', { name: label }).count()) > 0
+    assert(visible, `navigation shows ${label}`)
+  }
+
+  await page.getByRole('button', { name: 'English' }).click()
+  assert((await page.getByRole('button', { name: 'Overview' }).count()) > 0, 'language switch updates navigation text')
+
+  await page.getByRole('button', { name: 'Directory' }).click()
+  await page.waitForURL('**/workspace/directory', { timeout: 15000 })
+  assert((await page.locator('text=@admin').count()) > 0, 'directory renders the admin account')
+  assert((await page.locator('text=emma.chen@workpal.local').count()) > 0, 'directory renders seeded employee data')
+
+  await page.getByRole('button', { name: 'Chat' }).click()
+  await page.waitForURL('**/workspace/chat', { timeout: 15000 })
+  assert((await page.getByRole('button', { name: 'New conversation' }).count()) > 0, 'chat module renders create conversation action')
+  await page.getByRole('button', { name: 'New conversation' }).click()
+  assert((await page.locator('text=emma.chen').count()) > 0, 'conversation modal lists seeded teammates')
 }
 
 async function run() {
@@ -124,9 +127,8 @@ async function run() {
     await setup()
     await testHealthEndpoint()
     await testMetricsEndpoint()
-    const credentials = await createTestUser()
-    await testLoginAPI(credentials)
-    await testLoginPage()
+    await testSeededLoginsAPI()
+    await testWorkspaceUI()
   } catch (error) {
     console.error(`Unexpected test error: ${error.message}`)
     failed++

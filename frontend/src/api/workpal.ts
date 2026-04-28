@@ -7,6 +7,7 @@ import type {
   PageData,
   SearchResult,
 } from '../types/chat'
+import type { WorkspaceUser } from '../types/workspace'
 
 interface LoginPayload {
   username: string
@@ -36,6 +37,20 @@ function unwrapPageData<T>(value: T[] | PageData<T>): T[] {
 export const workpalApi = {
   login(payload: LoginPayload) {
     return apiPost<LoginResponse, LoginPayload>('/auth/login', payload)
+  },
+
+  getMe() {
+    return apiGet<WorkspaceUser>('/users/me')
+  },
+
+  async listUsers(pageSize = 100): Promise<WorkspaceUser[]> {
+    const data = await apiGet<WorkspaceUser[] | PageData<WorkspaceUser>>('/users', {
+      params: {
+        page: 1,
+        page_size: pageSize,
+      },
+    })
+    return unwrapPageData(data)
   },
 
   async listConversations(): Promise<Conversation[]> {

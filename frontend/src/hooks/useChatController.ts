@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { workpalApi } from '../api/workpal'
+import { playMessageTone } from '../utils/notifications'
 import type { ChatMessage, Conversation, CreateConversationDraft } from '../types/chat'
 import { useAuthStore, useConvStore, useWSStore } from './useAuthStore'
+import { usePreferencesStore } from './usePreferencesStore'
 
 interface WebSocketMessage {
   type: string
@@ -23,10 +24,10 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function useChatController() {
-  const navigate = useNavigate()
-  const { username, userId, token, logout } = useAuthStore()
+  const { username, userId, token } = useAuthStore()
   const { conversations, setConversations, activeConvID, setActiveConvID } = useConvStore()
   const { connected, setConnected, setWS, addMessage, messages, setMessages } = useWSStore()
+  const soundEnabled = usePreferencesStore((state) => state.soundEnabled)
 
   const [input, setInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -57,16 +58,6 @@ export function useChatController() {
     return messages[activeConvID] ?? []
   }, [activeConvID, messages, searchActive, searchResults])
 
-  const loadConversations = useCallback(async () => {
-    try {
-      const nextConversations = await workpalApi.listConversations()
-      setConversations(nextConversations)
-    } catch (error) {
-      console.error('Unable to load conversations.', error)
-      throw error
-    }
-  }, [setConversations])
-
   const loadMessages = useCallback(
     async (convID: number) => {
       try {
@@ -79,6 +70,33 @@ export function useChatController() {
     },
     [setMessages],
   )
+
+  const loadConversations = useCallback(async () => {
+    try {
+      const nextConversations = await workpalApi.listConversations()
+      setConversations(nextConversations)
+
+      if (nextConversations.length === 0) {
+        setActiveConvID(null)
+        return
+      }
+
+      const fallbackConversation =
+        nextConversations.find((conversation) => conversation.id === activeConvID) ?? nextConversations[0] ?? null
+
+      if (!fallbackConversation) {
+        return
+      }
+
+      setActiveConvID(fallbackConversation.id)
+      if (!messages[fallbackConversation.id]) {
+        await loadMessages(fallbackConversation.id)
+      }
+    } catch (error) {
+      console.error('Unable to load conversations.', error)
+      throw error
+    }
+  }, [activeConvID, loadMessages, messages, setActiveConvID, setConversations])
 
   const handleSocketMessage = useCallback(
     (event: MessageEvent<string>) => {
@@ -98,11 +116,15 @@ export function useChatController() {
         }
 
         addMessage(payload.conv_id, message)
+
+        if (payload.from !== userId && soundEnabled) {
+          playMessageTone()
+        }
       } catch (error) {
         console.error('Unable to parse websocket message.', error)
       }
     },
-    [addMessage],
+    [addMessage, soundEnabled, userId],
   )
 
   const connectWebSocket = useCallback(() => {
@@ -116,7 +138,6 @@ export function useChatController() {
     }
 
     closingRef.current = false
-
     const nextSocket = new WebSocket(buildWebSocketURL(token))
 
     nextSocket.onopen = () => {
@@ -171,11 +192,6 @@ export function useChatController() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeConvID, displayedMessages])
-
-  const handleLogout = useCallback(() => {
-    logout()
-    navigate('/login', { replace: true })
-  }, [logout, navigate])
 
   const handleSelectConversation = useCallback(
     async (conversation: Conversation) => {
@@ -268,7 +284,6 @@ export function useChatController() {
     username,
     handleClearSearch,
     handleCreateConversation,
-    handleLogout,
     handleSearch,
     handleSelectConversation,
     handleSend,

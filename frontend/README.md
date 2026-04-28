@@ -2,8 +2,7 @@
 
 这是 WorkPal 的 React + Vite 前端。
 
-如果你要从零启动整套项目，请优先看仓库根目录的 [README.md](../README.md)。  
-这里重点说明前端自己的启动方式和依赖关系。
+如果你要从零启动整套项目，请优先看仓库根目录的 [README.md](../README.md)。本文件主要说明前端自己的启动方式、代理关系和当前页面结构。
 
 ## 环境要求
 
@@ -17,7 +16,7 @@
 - 本地后端运行在 `http://localhost:8080`
 - Vite dev server 运行在 `http://localhost:3000`
 
-当前代理规则在 [vite.config.ts](vite.config.ts)：
+代理规则定义在 [vite.config.ts](vite.config.ts)：
 
 - `/api/*` -> `http://localhost:8080`
 - `/ws` -> `ws://localhost:8080`
@@ -27,59 +26,81 @@
 ```powershell
 cd frontend
 npm ci
-npm run dev
+npm run dev -- --host 127.0.0.1
 ```
 
-启动后打开：
+打开：
 
 ```text
 http://localhost:3000
 ```
 
-## 重要说明
+## 当前页面结构
 
-- 当前前端只有登录页，没有注册页
-- 在默认开发配置下，后端启动时会自动确保默认管理员账号存在：
-  - 用户名：`admin`
-  - 密码：`admin123`
-- 登录成功后会进入聊天页
+登录后会进入多板块工作台，而不是单一聊天页：
 
-建议先直接用这组账号登录。
+- `Overview / 总览`
+- `Chat / 沟通`
+- `Tasks / 任务`
+- `Schedule / 日程`
+- `Files / 文件`
+- `Directory / 通讯录`
 
-如果你需要额外测试账号，再手动创建：
+同时支持以下偏好设置：
 
-```powershell
-$suffix = Get-Date -Format 'MMddHHmmss'
-$username = "debug$suffix"
+- `English / 简体中文`
+- 浅色 / 深色主题
+- 消息提示音开关
+- 舒适 / 紧凑密度
 
-$body = @{
-  username = $username
-  password = "pass123456"
-  nickname = "Debug User"
-  email = "$username@example.com"
-} | ConvertTo-Json
+## 预置验收账号
 
-Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/v1/auth/register" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body $body
-```
+这些账号由后端开发模式自动确保存在，前端登录页也会直接展示：
+
+| 用户名 | 密码 |
+|---|---|
+| `admin` | `admin123` |
+| `emma.chen` | `workpal123` |
+| `liam.wang` | `workpal123` |
+| `sofia.zhao` | `workpal123` |
+
+## 哪些模块是后端联调，哪些是前端演示
+
+### 直接依赖后端
+
+- 登录
+- 当前用户 / 用户列表
+- 私聊 / 群聊
+- 消息发送
+- 消息搜索
+- WebSocket 实时状态
+
+### 当前为前端预置协作演示
+
+- 总览摘要
+- 任务看板
+- 日程面板
+- 文件与知识面板
+
+这些模块的存在是为了让项目在验收时具备更完整的办公协作平台形态，不再只有沟通板块。
 
 ## 常用脚本
 
 ```powershell
 cd frontend
-npm run dev
-npm run build
+npm run dev -- --host 127.0.0.1
 npm test
+npm run build
 ```
 
-## 调试建议
+## E2E 冒烟
 
-先确认下面两件事再看前端问题：
+要求前后端都已启动：
 
-1. `http://localhost:8080/health` 返回 200
-2. 你能用 `admin / admin123` 登录，或者已经手动创建了一个可登录账号
+```powershell
+cd frontend
+npx playwright install chromium
+node ..\testing\e2e\playwright.mjs
+```
 
-如果后端没起来，前端页可以打开，但 API 请求和聊天功能一定不通。
+这个脚本会验证预置账号登录、工作台导航、语言切换、通讯录和聊天入口。

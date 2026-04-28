@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { AppTranslations } from '../../i18n'
 import type { CreateConversationDraft } from '../../types/chat'
+import type { WorkspaceUser } from '../../types/workspace'
 
 interface CreateConversationModalProps {
   open: boolean
+  users: WorkspaceUser[]
+  currentUserId: number | null
+  labels: AppTranslations['chat']
+  common: AppTranslations['common']
   onClose: () => void
   onSubmit: (draft: CreateConversationDraft) => Promise<void>
 }
@@ -11,51 +17,58 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unable to create the conversation.'
 }
 
-function parseMemberIDs(value: string): number[] {
-  const uniqueIDs = new Set<number>()
+export default function CreateConversationModal({
+  open,
+  users,
+  currentUserId,
+  labels,
+  common,
+  onClose,
+  onSubmit,
+}: CreateConversationModalProps) {
+  const teammates = useMemo(
+    () => users.filter((user) => user.id !== currentUserId).sort((left, right) => left.username.localeCompare(right.username)),
+    [currentUserId, users],
+  )
 
-  value
-    .split(',')
-    .map((item) => Number.parseInt(item.trim(), 10))
-    .filter((item) => Number.isInteger(item) && item > 0)
-    .forEach((item) => uniqueIDs.add(item))
-
-  return [...uniqueIDs]
-}
-
-export default function CreateConversationModal({ open, onClose, onSubmit }: CreateConversationModalProps) {
   const [mode, setMode] = useState<'private' | 'group'>('private')
-  const [targetUserID, setTargetUserID] = useState('')
+  const [selectedDirectUserId, setSelectedDirectUserId] = useState<number | null>(null)
   const [groupName, setGroupName] = useState('')
-  const [groupMembers, setGroupMembers] = useState('')
+  const [groupMemberIds, setGroupMemberIds] = useState<number[]>([])
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (open) {
+    if (!open) {
+      setMode('private')
+      setSelectedDirectUserId(null)
+      setGroupName('')
+      setGroupMemberIds([])
       setError('')
+      setSubmitting(false)
       return
     }
 
-    setMode('private')
-    setTargetUserID('')
-    setGroupName('')
-    setGroupMembers('')
     setError('')
-    setSubmitting(false)
-  }, [open])
+    setSelectedDirectUserId((current) => current ?? teammates[0]?.id ?? null)
+  }, [open, teammates])
 
   if (!open) {
     return null
+  }
+
+  const toggleGroupMember = (userId: number) => {
+    setGroupMemberIds((current) =>
+      current.includes(userId) ? current.filter((item) => item !== userId) : [...current, userId].sort((left, right) => left - right),
+    )
   }
 
   const handleSubmit = async () => {
     setError('')
 
     if (mode === 'private') {
-      const parsedUserID = Number.parseInt(targetUserID, 10)
-      if (!Number.isInteger(parsedUserID) || parsedUserID <= 0) {
-        setError('Please enter a valid user ID.')
+      if (!selectedDirectUserId) {
+        setError(labels.invalidDirect)
         return
       }
 
@@ -63,7 +76,7 @@ export default function CreateConversationModal({ open, onClose, onSubmit }: Cre
       try {
         await onSubmit({
           mode: 'private',
-          targetUserId: parsedUserID,
+          targetUserId: selectedDirectUserId,
         })
       } catch (submitError) {
         setError(getErrorMessage(submitError))
@@ -73,9 +86,8 @@ export default function CreateConversationModal({ open, onClose, onSubmit }: Cre
       return
     }
 
-    const memberIDs = parseMemberIDs(groupMembers)
-    if (memberIDs.length === 0) {
-      setError('Please add at least one member ID.')
+    if (groupMemberIds.length === 0) {
+      setError(labels.invalidGroup)
       return
     }
 
@@ -84,7 +96,7 @@ export default function CreateConversationModal({ open, onClose, onSubmit }: Cre
       await onSubmit({
         mode: 'group',
         name: groupName.trim(),
-        memberIds: memberIDs,
+        memberIds: groupMemberIds,
       })
     } catch (submitError) {
       setError(getErrorMessage(submitError))
@@ -94,133 +106,108 @@ export default function CreateConversationModal({ open, onClose, onSubmit }: Cre
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15, 23, 42, 0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        zIndex: 1000,
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 380,
-          background: '#ffffff',
-          borderRadius: 12,
-          padding: 24,
-          boxShadow: '0 24px 48px rgba(15, 23, 42, 0.18)',
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: 20 }}>Create conversation</h3>
-        <p style={{ margin: '8px 0 20px', color: '#6b7280', fontSize: 14 }}>
-          Start a direct conversation or open a new group room.
-        </p>
+    <div className="dialog-scrim">
+      <div className="dialog-panel">
+        <div className="dialog-header">
+          <div>
+            <h3>{labels.createTitle}</h3>
+            <p>{labels.createSubtitle}</p>
+          </div>
+        </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <div className="segmented-control dialog-segment">
           <button
             type="button"
+            className={mode === 'private' ? 'segment-button active' : 'segment-button'}
             onClick={() => setMode('private')}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
-              background: mode === 'private' ? '#2563eb' : '#ffffff',
-              color: mode === 'private' ? '#ffffff' : '#111827',
-              fontWeight: 600,
-            }}
           >
-            Direct
+            {labels.direct}
           </button>
           <button
             type="button"
+            className={mode === 'group' ? 'segment-button active' : 'segment-button'}
             onClick={() => setMode('group')}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
-              background: mode === 'group' ? '#2563eb' : '#ffffff',
-              color: mode === 'group' ? '#ffffff' : '#111827',
-              fontWeight: 600,
-            }}
           >
-            Group
+            {labels.group}
           </button>
         </div>
 
-        {mode === 'private' ? (
-          <div className="form-item">
-            <label htmlFor="target-user-id">Target user ID</label>
-            <input
-              id="target-user-id"
-              type="number"
-              value={targetUserID}
-              onChange={(event) => setTargetUserID(event.target.value)}
-              placeholder="Enter a numeric user ID"
-            />
+        {teammates.length === 0 ? (
+          <div className="empty-panel">{labels.noTeamMembers}</div>
+        ) : mode === 'private' ? (
+          <div className="form-stack">
+            <div className="form-copy">
+              <strong>{labels.directTarget}</strong>
+              <span>{labels.directTargetHint}</span>
+            </div>
+            <div className="choice-list">
+              {teammates.map((user) => {
+                const selected = user.id === selectedDirectUserId
+
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    className={selected ? 'choice-card selected' : 'choice-card'}
+                    onClick={() => setSelectedDirectUserId(user.id)}
+                  >
+                    <div>
+                      <strong>{user.nickname || user.username}</strong>
+                      <span>@{user.username}</span>
+                    </div>
+                    <span className="choice-meta">#{user.id}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         ) : (
-          <>
+          <div className="form-stack">
             <div className="form-item">
-              <label htmlFor="group-name">Group name</label>
+              <label htmlFor="group-name">{labels.groupName}</label>
               <input
                 id="group-name"
                 type="text"
                 value={groupName}
                 onChange={(event) => setGroupName(event.target.value)}
-                placeholder="Optional group name"
+                placeholder={labels.groupNamePlaceholder}
               />
             </div>
-            <div className="form-item">
-              <label htmlFor="group-members">Member IDs</label>
-              <input
-                id="group-members"
-                type="text"
-                value={groupMembers}
-                onChange={(event) => setGroupMembers(event.target.value)}
-                placeholder="Example: 12,18,24"
-              />
+            <div className="form-copy">
+              <strong>{labels.groupMembers}</strong>
+              <span>{labels.groupMembersHint}</span>
             </div>
-          </>
+            <div className="choice-list">
+              {teammates.map((user) => {
+                const selected = groupMemberIds.includes(user.id)
+
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    className={selected ? 'choice-card selected' : 'choice-card'}
+                    onClick={() => toggleGroupMember(user.id)}
+                  >
+                    <div>
+                      <strong>{user.nickname || user.username}</strong>
+                      <span>@{user.username}</span>
+                    </div>
+                    <span className="choice-meta">#{user.id}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         )}
 
         {error ? <div className="error-msg">{error}</div> : null}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
-              background: '#ffffff',
-              color: '#111827',
-            }}
-          >
-            Cancel
+        <div className="dialog-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            {common.cancel}
           </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 8,
-              background: '#2563eb',
-              color: '#ffffff',
-              opacity: submitting ? 0.7 : 1,
-            }}
-          >
-            {submitting ? 'Creating...' : 'Create'}
+          <button type="button" className="primary-button" onClick={handleSubmit} disabled={submitting || teammates.length === 0}>
+            {submitting ? labels.creating : labels.createAction}
           </button>
         </div>
       </div>

@@ -2,15 +2,14 @@
 
 这是 WorkPal 的 Go 后端。
 
-如果你的目标是从零把整套项目跑起来，请优先看仓库根目录的 [README.md](../README.md)。  
-这份文档只补充后端独有的信息。
+如果你的目标是从零启动整套项目，请优先看仓库根目录的 [README.md](../README.md)。这份文档只补充后端独有的信息。
 
 ## 环境要求
 
 - Go 1.22+
 - Docker Desktop / Docker Engine
 
-## 启动前依赖
+## 启动依赖
 
 后端依赖：
 
@@ -18,7 +17,7 @@
 - Redis
 - MinIO
 
-推荐直接在仓库根目录启动：
+推荐在仓库根目录执行：
 
 ```powershell
 docker compose -f docker/docker-compose.yaml up -d
@@ -29,23 +28,17 @@ docker compose -f docker/docker-compose.yaml ps
 
 后端按下面顺序读取配置：
 
-1. `CONFIG_PATH` 指向的文件
+1. `CONFIG_PATH`
 2. `configs/config.yaml`
 3. `configs/config.example.yaml`
 
-所以直接运行时，即使你没有复制 `config.yaml`，也会回退到样例配置。
+因此，默认情况下不复制 `config.yaml` 也能启动。
 
-如果要自定义本地配置：
+如果你想改本地配置：
 
 ```powershell
 Copy-Item configs\config.example.yaml configs\config.yaml
 ```
-
-默认样例配置适配仓库里的 Docker Compose：
-
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-- MinIO: `localhost:9000`
 
 ## 启动后端
 
@@ -61,44 +54,27 @@ Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
 Invoke-WebRequest http://localhost:8080/ -UseBasicParsing
 ```
 
-## 重要事实
+## 开发模式预置账号
 
-- 后端会在启动时自动执行 GORM `AutoMigrate`
-- `/health` 会同时检查 PostgreSQL 和 Redis
-- WebSocket 地址是 `/ws?token=...`
-- 在默认开发配置下，后端启动时会自动确保默认管理员账号存在：
-  - 用户名：`admin`
-  - 密码：`admin123`
-- 这条默认管理员逻辑仅适用于 `server.mode != release` 的本地开发/验收场景
+当 `server.mode != release` 时，后端启动会自动确保这些账号存在：
 
-## 常用命令
+| 角色 | 用户名 | 密码 |
+|---|---|---|
+| 管理员 | `admin` | `admin123` |
+| 员工 | `emma.chen` | `workpal123` |
+| 员工 | `liam.wang` | `workpal123` |
+| 员工 | `sofia.zhao` | `workpal123` |
 
-```powershell
-cd backend
-go test ./...
-go test -race ./...
-go build ./cmd/server
-```
+这意味着你每次本地重启后端，都可以直接用这些账号做验收与联调，不必再手动注册测试用户。
 
-## 可选的 Makefile
+## 重要行为
 
-如果你的环境里有 `make`，也可以用：
+- 启动时自动执行 GORM `AutoMigrate`
+- `/health` 同时检查 PostgreSQL 与 Redis
+- `/metrics` 提供 Prometheus 指标
+- WebSocket 地址为 `/ws?token=...`
 
-```bash
-cd backend
-make deps
-make docker-up
-make run
-make test
-make lint
-```
-
-注意：
-
-- `make docker-up` 依赖 Docker
-- 这个 Makefile 主要偏 Unix 风格；Windows 上更推荐直接用上面的 PowerShell 命令
-
-## 常见接口
+## 常用接口
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -107,9 +83,11 @@ make lint
 | `POST` | `/api/v1/auth/register` | 注册 |
 | `POST` | `/api/v1/auth/login` | 登录 |
 | `GET` | `/api/v1/users/me` | 当前用户 |
-| `WS` | `/ws?token=...` | WebSocket |
+| `GET` | `/api/v1/users` | 用户列表 |
+| `GET` | `/api/v1/users/search` | 用户搜索 |
+| `WS` | `/ws?token=...` | 实时消息 |
 
-## 默认管理员登录示例
+## 登录示例
 
 ```powershell
 $body = @{
@@ -124,24 +102,24 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-## 可选：创建额外测试账号
+## 常用命令
 
 ```powershell
-$suffix = Get-Date -Format 'MMddHHmmss'
-$username = "debug$suffix"
-
-$body = @{
-  username = $username
-  password = "pass123456"
-  nickname = "Debug User"
-  email = "$username@example.com"
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/v1/auth/register" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body $body
+cd backend
+go test ./...
+go test -race ./...
+go build ./cmd/server
 ```
 
-建议每次调试都带一个新的 `email`，因为当前 `users.email` 是唯一索引。
+## Makefile
+
+如果你的环境里有 `make`，也可以使用：
+
+```bash
+cd backend
+make deps
+make docker-up
+make run
+make test
+make lint
+```

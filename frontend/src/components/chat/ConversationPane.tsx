@@ -1,9 +1,11 @@
 import type { KeyboardEvent, RefObject } from 'react'
+import type { AppTranslations } from '../../i18n'
 import type { ChatMessage, Conversation } from '../../types/chat'
 
 interface ConversationPaneProps {
   conversation: Conversation | null
   userId: number | null
+  labels: AppTranslations['chat']
   messages: ChatMessage[]
   input: string
   searchQuery: string
@@ -17,12 +19,12 @@ interface ConversationPaneProps {
   messagesEndRef: RefObject<HTMLDivElement>
 }
 
-function getConversationTitle(conversation: Conversation): string {
+function getConversationTitle(conversation: Conversation, labels: AppTranslations['chat']): string {
   if (conversation.type === 2) {
-    return conversation.name || 'Group chat'
+    return conversation.name || labels.groupChat
   }
 
-  return conversation.name || `Direct chat #${conversation.id}`
+  return conversation.name || `${labels.directChatPrefix} #${conversation.id}`
 }
 
 function formatTimestamp(value: string): string {
@@ -40,6 +42,7 @@ function formatTimestamp(value: string): string {
 export default function ConversationPane({
   conversation,
   userId,
+  labels,
   messages,
   input,
   searchQuery,
@@ -62,145 +65,56 @@ export default function ConversationPane({
   }
 
   if (!conversation) {
-    return (
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#6b7280',
-          background: '#f8fafc',
-        }}
-      >
-        Select a conversation to start chatting.
-      </main>
-    )
+    return <main className="conversation-pane empty-panel">{labels.selectConversation}</main>
   }
 
   return (
-    <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <div
-        style={{
-          padding: '14px 20px',
-          background: '#ffffff',
-          borderBottom: '1px solid #e5e7eb',
-          display: 'flex',
-          gap: 12,
-          alignItems: 'center',
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#111827' }}>{getConversationTitle(conversation)}</div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-            {conversation.type === 2 ? 'Group conversation' : 'Direct conversation'}
-          </div>
+    <main className="conversation-pane">
+      <div className="conversation-toolbar">
+        <div className="conversation-heading">
+          <h3>{getConversationTitle(conversation, labels)}</h3>
+          <p>{conversation.type === 2 ? labels.groupConversation : labels.directConversation}</p>
         </div>
 
         <form
+          className="inline-form"
           onSubmit={(event) => {
             event.preventDefault()
             void onSearch()
           }}
-          style={{ display: 'flex', gap: 8 }}
         >
           <input
             type="text"
             value={searchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search messages"
-            style={{
-              width: 220,
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
-              fontSize: 14,
-            }}
+            placeholder={labels.searchPlaceholder}
           />
-          <button
-            type="submit"
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
-              background: '#ffffff',
-              color: '#111827',
-            }}
-          >
-            Search
+          <button type="submit" className="secondary-button">
+            {labels.searchAction}
           </button>
-          {searchQuery.trim() || searchActive ? (
-            <button
-              type="button"
-              onClick={onClearSearch}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 8,
-                border: '1px solid #d1d5db',
-                background: '#ffffff',
-                color: '#111827',
-              }}
-            >
-              Clear
+          {(searchQuery.trim() || searchActive) && (
+            <button type="button" className="secondary-button" onClick={onClearSearch}>
+              {labels.clearAction}
             </button>
-          ) : null}
+          )}
         </form>
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '20px 24px',
-          background: '#f8fafc',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
-        {searching ? (
-          <div style={{ textAlign: 'center', color: '#6b7280', fontSize: 14 }}>Searching messages...</div>
-        ) : null}
+      <div className="message-stream">
+        {searching ? <div className="empty-panel">{labels.searching}</div> : null}
 
         {!searching && messages.length === 0 ? (
-          <div style={{ textAlign: 'center', color: '#6b7280', fontSize: 14 }}>
-            {searchActive ? 'No matching messages found.' : 'No messages yet.'}
-          </div>
+          <div className="empty-panel">{searchActive ? labels.noSearchResults : labels.noMessages}</div>
         ) : null}
 
         {messages.map((message) => {
           const ownMessage = message.sender_id === userId
 
           return (
-            <div
-              key={message.id}
-              style={{
-                display: 'flex',
-                justifyContent: ownMessage ? 'flex-end' : 'flex-start',
-              }}
-            >
-              <div
-                style={{
-                  maxWidth: '70%',
-                  padding: '10px 14px',
-                  borderRadius: 12,
-                  background: ownMessage ? '#2563eb' : '#ffffff',
-                  color: ownMessage ? '#ffffff' : '#111827',
-                  boxShadow: '0 1px 3px rgba(15, 23, 42, 0.08)',
-                  wordBreak: 'break-word',
-                }}
-              >
-                <div style={{ fontSize: 14, lineHeight: 1.5 }}>{message.content}</div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontSize: 11,
-                    opacity: 0.75,
-                    textAlign: 'right',
-                  }}
-                >
-                  {formatTimestamp(message.created_at)}
-                </div>
+            <div key={message.id} className={ownMessage ? 'message-row self' : 'message-row'}>
+              <div className={ownMessage ? 'message-bubble self' : 'message-bubble'}>
+                <div className="message-content">{message.content}</div>
+                <div className="message-time">{formatTimestamp(message.created_at)}</div>
               </div>
             </div>
           )
@@ -209,40 +123,25 @@ export default function ConversationPane({
         <div ref={messagesEndRef} />
       </div>
 
-      <div style={{ padding: 16, background: '#ffffff', borderTop: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text"
-            value={input}
-            onChange={(event) => onInputChange(event.target.value)}
-            onKeyDown={(event) => {
-              void handleInputKeyDown(event)
-            }}
-            placeholder="Write a message"
-            style={{
-              flex: 1,
-              padding: '12px 14px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
-              fontSize: 14,
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              void onSend()
-            }}
-            style={{
-              padding: '12px 18px',
-              borderRadius: 8,
-              background: '#2563eb',
-              color: '#ffffff',
-              fontWeight: 600,
-            }}
-          >
-            Send
-          </button>
-        </div>
+      <div className="composer">
+        <input
+          type="text"
+          value={input}
+          onChange={(event) => onInputChange(event.target.value)}
+          onKeyDown={(event) => {
+            void handleInputKeyDown(event)
+          }}
+          placeholder={labels.writeMessage}
+        />
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => {
+            void onSend()
+          }}
+        >
+          {labels.send}
+        </button>
       </div>
     </main>
   )
