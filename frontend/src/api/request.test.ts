@@ -1,5 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { useAuthStore, useConvStore, useWSStore } from '../hooks/useAuthStore'
+
+beforeEach(() => {
+  localStorage.clear()
+  useAuthStore.getState().logout()
+  useConvStore.setState({ conversations: [], activeConvID: null })
+  useWSStore.setState({ connected: false, ws: null, messages: {} })
+})
 
 describe('useAuthStore (Zustand)', () => {
   it('should export auth store', () => {
@@ -103,6 +110,15 @@ describe('useWSStore (Zustand)', () => {
     expect(state.messages[100]).toBeDefined()
     expect(state.messages[100].length).toBe(1)
     expect(state.messages[100][0].content).toBe('hello')
+  })
+
+  it('should ignore duplicate messages', () => {
+    const { addMessage } = useWSStore.getState()
+    const msg = { id: 1, conv_id: 100, sender_id: 10, type: 1, content: 'hello', created_at: new Date().toISOString() }
+    addMessage(100, msg)
+    addMessage(100, msg)
+    const state = useWSStore.getState()
+    expect(state.messages[100].length).toBe(1)
   })
 
   it('should be able to set messages for conversation', () => {

@@ -1,33 +1,39 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useAuthStore } from './hooks/useAuthStore'
-import LoginPage from './pages/LoginPage'
-import ChatPage from './pages/ChatPage'
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
+import { useAuthStore } from './hooks/useAuthStore'
+import ChatPage from './pages/ChatPage'
+import LoginPage from './pages/LoginPage'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const token = useAuthStore((s) => s.token)
-  if (!token) return <Navigate to="/login" replace />
-  return <>{children}</>
+function ProtectedRoute() {
+  const token = useAuthStore((state) => state.token)
+  if (!token) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <Outlet />
+}
+
+function LoginRoute() {
+  const token = useAuthStore((state) => state.token)
+  if (token) {
+    return <Navigate to="/chat" replace />
+  }
+
+  return <LoginPage />
 }
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          path="/*"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Navigate to="/chat" replace />} />
-                  <Route path="/chat" element={<ChatPage />} />
-                </Routes>
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/login" element={<LoginRoute />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route index element={<Navigate to="/chat" replace />} />
+            <Route path="/chat" element={<ChatPage />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/chat" replace />} />
       </Routes>
     </BrowserRouter>
   )

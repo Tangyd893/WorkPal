@@ -1,6 +1,5 @@
-import axios from 'axios'
-
-const STORAGE_KEY = 'workpal-auth'
+import axios, { AxiosHeaders, type AxiosRequestConfig } from 'axios'
+import { getStoredToken } from '../utils/authStorage'
 
 interface ApiResponse<T> {
   code: number
@@ -8,16 +7,37 @@ interface ApiResponse<T> {
   data?: T
 }
 
-// Read token directly from localStorage to avoid Zustand hydration timing issues
-const getStoredToken = (): string | null => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      return parsed.token || null
+function isApiResponse<T>(body: unknown): body is ApiResponse<T> {
+  return typeof body === 'object' && body !== null && 'code' in body && typeof (body as { code: unknown }).code === 'number'
+}
+
+function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data
+    if (data && typeof data === 'object' && 'message' in data && typeof (data as { message: unknown }).message === 'string') {
+      return (data as { message: string }).message
     }
-  } catch {}
-  return null
+
+    return error.message || 'Network request failed.'
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return 'Network request failed.'
+}
+
+function unwrapApiBody<T>(body: unknown): T {
+  if (!isApiResponse(body)) {
+    return body as T
+  }
+
+  if (body.code !== 0) {
+    throw new Error(body.message || 'Request failed.')
+  }
+
+  return (body.data ?? null) as T
 }
 
 const request = axios.create({
@@ -25,39 +45,46 @@ const request = axios.create({
   timeout: 10000,
 })
 
-// 请求拦截器：注入 Token
 request.interceptors.request.use((config) => {
   const token = getStoredToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  if (!token) {
+    return config
   }
+
+  const headers = AxiosHeaders.from(config.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  config.headers = headers
   return config
 })
 
-// 响应拦截器：统一错误处理
-request.interceptors.response.use(
-  (res) => {
-    const body = res.data as ApiResponse<unknown> | unknown
-    if (body && typeof body === 'object' && 'code' in body && typeof (body as ApiResponse<unknown>).code === 'number') {
-      const apiBody = body as ApiResponse<unknown>
-      if (apiBody.code !== 0) {
-        throw new Error(apiBody.message || '请求失败')
-      }
-      return apiBody.data ?? null
-    }
-    return body
-  },
-  (err) => {
-    const msg = err.response?.data?.message || err.message || '网络错误'
-    console.error('API Error:', msg)
-    throw new Error(msg)
-  }
-)
+request.interceptors.response.use(undefined, (error) => Promise.reject(new Error(getErrorMessage(error))))
 
-// 搜索消息
-export const searchMessages = (q: string, convID?: number, page = 1, pageSize = 20) =>
-  request.get<any, any>('/search/messages', {
-    params: { q, conv_id: convID, page, page_size: pageSize },
-  })
+export async function apiGet<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  const response = await request.get<unknown>(url, config)
+  return unwrapApiBody<T>(response.data)
+}
+
+export async function apiPost<TResponse, TBody = unknown>(
+  url: string,
+  body?: TBody,
+  config?: AxiosRequestConfig<TBody>,
+): Promise<TResponse> {
+  const response = await request.post<unknown>(url, body, config)
+  return unwrapApiBody<TResponse>(response.data)
+}
+
+export async function apiPut<TResponse, TBody = unknown>(
+  url: string,
+  body?: TBody,
+  config?: AxiosRequestConfig<TBody>,
+): Promise<TResponse> {
+  const response = await request.put<unknown>(url, body, config)
+  return unwrapApiBody<TResponse>(response.data)
+}
+
+export async function apiDelete<TResponse>(url: string, config?: AxiosRequestConfig): Promise<TResponse> {
+  const response = await request.delete<unknown>(url, config)
+  return unwrapApiBody<TResponse>(response.data)
+}
 
 export default request

@@ -1,101 +1,81 @@
 import { create } from 'zustand'
+import type { ChatMessage, Conversation } from '../types/chat'
+import {
+  clearAuthState,
+  emptyAuthState,
+  loadAuthState,
+  saveAuthState,
+  type PersistedAuthState,
+} from '../utils/authStorage'
 
-interface AuthState {
-  token: string | null
-  userId: number | null
-  username: string | null
+interface AuthState extends PersistedAuthState {
   setAuth: (token: string, userId: number, username: string) => void
   logout: () => void
 }
 
-const STORAGE_KEY = 'workpal-auth'
-
-// Helper to read persisted state
-const loadPersistedState: () => AuthState = () => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return { token: null, userId: null, username: null }
-}
-
-export const useAuthStore = create<AuthState>()((set) => ({
-  ...loadPersistedState(),
-  setAuth: (token, userId, username) => {
-    const state = { token, userId, username }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    set(state)
-  },
-  logout: () => {
-    localStorage.removeItem(STORAGE_KEY)
-    set({ token: null, userId: null, username: null })
-  },
-}))
-
-// WebSocket store
 interface WSState {
   connected: boolean
   ws: WebSocket | null
-  messages: Record<number, ChatMessage[]> // convID -> messages
-  setConnected: (v: boolean) => void
+  messages: Record<number, ChatMessage[]>
+  setConnected: (connected: boolean) => void
   setWS: (ws: WebSocket | null) => void
-  addMessage: (convID: number, msg: ChatMessage) => void
-  setMessages: (convID: number, msgs: ChatMessage[]) => void
+  addMessage: (convID: number, message: ChatMessage) => void
+  setMessages: (convID: number, messages: ChatMessage[]) => void
 }
 
-export interface ChatMessage {
-  id: number
-  conv_id: number
-  sender_id: number
-  type: number
-  content: string
-  metadata?: string
-  reply_to?: number
-  created_at: string
+interface ConvState {
+  conversations: Conversation[]
+  activeConvID: number | null
+  setConversations: (conversations: Conversation[]) => void
+  setActiveConvID: (id: number | null) => void
 }
+
+export const useAuthStore = create<AuthState>()((set) => ({
+  ...loadAuthState(),
+  setAuth: (token, userId, username) => {
+    const nextState = { token, userId, username }
+    saveAuthState(nextState)
+    set(nextState)
+  },
+  logout: () => {
+    clearAuthState()
+    set({ ...emptyAuthState })
+  },
+}))
 
 export const useWSStore = create<WSState>()((set) => ({
   connected: false,
   ws: null,
   messages: {},
-  setConnected: (v) => set({ connected: v }),
+  setConnected: (connected) => set({ connected }),
   setWS: (ws) => set({ ws }),
-  addMessage: (convID, msg) =>
+  addMessage: (convID, message) =>
+    set((state) => {
+      const existingMessages = state.messages[convID] ?? []
+      const alreadyExists = message.id !== 0 && existingMessages.some((item) => item.id === message.id)
+      if (alreadyExists) {
+        return state
+      }
+
+      return {
+        messages: {
+          ...state.messages,
+          [convID]: [...existingMessages, message],
+        },
+      }
+    }),
+  setMessages: (convID, messages) =>
     set((state) => ({
       messages: {
         ...state.messages,
-        [convID]: msg.id && (state.messages[convID] || []).some((item) => item.id === msg.id)
-          ? state.messages[convID]
-          : [...(state.messages[convID] || []), msg],
+        [convID]: messages,
       },
-    })),
-  setMessages: (convID, msgs) =>
-    set((state) => ({
-      messages: { ...state.messages, [convID]: msgs },
     })),
 }))
 
-// Conversation store
-interface ConvState {
-  conversations: Conversation[]
-  setConversations: (convs: Conversation[]) => void
-  activeConvID: number | null
-  setActiveConvID: (id: number | null) => void
-}
-
-export interface Conversation {
-  id: number
-  type: number // 1=private, 2=group
-  name: string
-  avatar_url?: string
-  owner_id: number
-  created_at: string
-  updated_at: string
-}
-
 export const useConvStore = create<ConvState>()((set) => ({
   conversations: [],
-  setConversations: (convs) => set({ conversations: convs }),
   activeConvID: null,
-  setActiveConvID: (id) => set({ activeConvID: id }),
+  setConversations: (conversations) => set({ conversations }),
+  setActiveConvID: (activeConvID) => set({ activeConvID }),
 }))

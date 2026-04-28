@@ -27,6 +27,9 @@ Thumbs.db
 # Node (frontend)
 node_modules/
 dist/
+*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
 .env.local
 .env.*.local
 
