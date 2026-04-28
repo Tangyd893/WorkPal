@@ -2,6 +2,7 @@ import type { AppTranslations } from '../i18n'
 import ConversationPane from '../components/chat/ConversationPane'
 import ConversationSidebar from '../components/chat/ConversationSidebar'
 import CreateConversationModal from '../components/chat/CreateConversationModal'
+import GroupDetailsPanel from '../components/chat/GroupDetailsPanel'
 import { useChatController } from '../hooks/useChatController'
 import type { WorkspaceUser } from '../types/workspace'
 
@@ -12,6 +13,7 @@ interface ChatPageProps {
 
 export default function ChatPage({ teamMembers, text }: ChatPageProps) {
   const chat = useChatController()
+  const showGroupDetails = chat.currentConversation?.type === 2
 
   return (
     <section className="module-surface">
@@ -28,7 +30,10 @@ export default function ChatPage({ teamMembers, text }: ChatPageProps) {
         </div>
       </div>
 
-      <div className="chat-layout">
+      {chat.error ? <div className="banner-error">{chat.error}</div> : null}
+      {chat.notice ? <div className="banner-info">{chat.notice}</div> : null}
+
+      <div className={showGroupDetails ? 'chat-layout with-details' : 'chat-layout'}>
         <ConversationSidebar
           conversations={chat.conversations}
           activeConversationID={chat.activeConvID}
@@ -55,6 +60,24 @@ export default function ChatPage({ teamMembers, text }: ChatPageProps) {
           onSend={chat.handleSend}
           messagesEndRef={chat.messagesEndRef}
         />
+
+        {showGroupDetails && chat.currentConversation ? (
+          <GroupDetailsPanel
+            conversation={chat.currentConversation}
+            labels={text.chat}
+            common={text.common}
+            announcement={chat.announcementDraft}
+            announcementSaving={chat.announcementSaving}
+            files={chat.groupFiles}
+            filesLoading={chat.groupFilesLoading}
+            uploading={chat.groupFileUploading}
+            onAnnouncementChange={chat.setAnnouncementDraft}
+            onSaveAnnouncement={chat.handleSaveAnnouncement}
+            onUploadFile={chat.handleUploadGroupFile}
+            onDeleteFile={chat.handleDeleteGroupFile}
+            onShareFile={chat.handleShareGroupFile}
+          />
+        ) : null}
       </div>
 
       <CreateConversationModal

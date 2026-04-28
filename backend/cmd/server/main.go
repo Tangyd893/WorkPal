@@ -144,7 +144,7 @@ func main() {
 	// User 模块
 	userRepoInst := userRepo.NewUserRepo(db)
 	if cfg.Server.Mode != "release" {
-		if err := ensureDevelopmentUsers(context.Background(), userRepoInst); err != nil {
+		if err := ensureDevelopmentUsers(context.Background(), db, userRepoInst); err != nil {
 			log.Fatalf("failed to ensure development users: %v", err)
 		}
 		log.Printf("development users ensured (%d accounts)", len(developmentUserSeeds))
@@ -337,6 +337,7 @@ func autoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&model.User{},
 		&model.Department{},
+		&model.Employee{},
 		&imModel.Conversation{},
 		&imModel.ConversationMember{},
 		&imModel.Message{},

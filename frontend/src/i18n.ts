@@ -15,6 +15,13 @@ export interface AppTranslations {
     unavailable: string
     enabled: string
     disabled: string
+    delete: string
+    share: string
+    save: string
+    open: string
+    upload: string
+    add: string
+    close: string
   }
   login: {
     title: string
@@ -79,13 +86,27 @@ export interface AppTranslations {
       docs: string
       docsHint: string
     }
+    quickActions: string
+    quickActionsHint: string
+    openSection: string
     noUsers: string
   }
   tasks: {
     title: string
     subtitle: string
+    addTask: string
+    addHint: string
+    titleLabel: string
+    summaryLabel: string
+    projectLabel: string
+    priorityLabel: string
+    createAction: string
     advance: string
     reset: string
+    deleteAction: string
+    shareAction: string
+    empty: string
+    sharedCount: string
     statuses: Record<'planned' | 'in_progress' | 'review' | 'done', string>
     priorities: Record<'high' | 'medium' | 'low', string>
     due: string
@@ -95,6 +116,16 @@ export interface AppTranslations {
   schedule: {
     title: string
     subtitle: string
+    addEvent: string
+    addHint: string
+    titleLabel: string
+    detailLabel: string
+    ownerLabel: string
+    createAction: string
+    deleteAction: string
+    shareAction: string
+    empty: string
+    sharedCount: string
     starts: string
     duration: string
     room: string
@@ -104,14 +135,26 @@ export interface AppTranslations {
   files: {
     title: string
     subtitle: string
-    updated: string
+    uploadAction: string
+    uploadHint: string
     owner: string
+    updated: string
+    attachmentLabel: string
+    sharedCount: string
+    deleteAction: string
+    shareAction: string
+    openAction: string
+    sourceSeed: string
+    sourceUpload: string
+    empty: string
     categories: Record<'draft' | 'review' | 'ready', string>
   }
   directory: {
     title: string
     subtitle: string
     searchPlaceholder: string
+    searchHint: string
+    allDepartments: string
     idLabel: string
     emailLabel: string
     phoneLabel: string
@@ -119,6 +162,8 @@ export interface AppTranslations {
     departmentLabel: string
     locationLabel: string
     focusLabel: string
+    employeeNoLabel: string
+    bioLabel: string
     noResults: string
     currentUser: string
   }
@@ -159,6 +204,18 @@ export interface AppTranslations {
     invalidGroup: string
     noTeamMembers: string
     memberCount: string
+    announcementTitle: string
+    announcementPlaceholder: string
+    announcementSave: string
+    announcementSaved: string
+    groupFilesTitle: string
+    uploadFile: string
+    noFiles: string
+    shareFile: string
+    deleteFile: string
+    uploadSuccess: string
+    uploadFailure: string
+    saveFailure: string
   }
   status: {
     online: string
@@ -178,6 +235,13 @@ export const translations: Record<Locale, AppTranslations> = {
       unavailable: 'Unavailable',
       enabled: 'Enabled',
       disabled: 'Disabled',
+      delete: 'Delete',
+      share: 'Share',
+      save: 'Save',
+      open: 'Open',
+      upload: 'Upload',
+      add: 'Add',
+      close: 'Close',
     },
     login: {
       title: 'Sign in to WorkPal',
@@ -199,7 +263,7 @@ export const translations: Record<Locale, AppTranslations> = {
       helperItems: [
         'Switch between Overview, Chat, Tasks, Schedule, Files, and Directory.',
         'Create direct chats and group rooms with seeded employees.',
-        'Toggle language, light/dark theme, message sound, and density preferences.',
+        'Toggle language, light and dark theme, message sound, and density preferences.',
       ],
     },
     navigation: {
@@ -216,11 +280,11 @@ export const translations: Record<Locale, AppTranslations> = {
       preferences: 'Preferences',
       signOut: 'Sign out',
       datePrefix: 'Today',
-      liveData: 'Live users from backend',
+      liveData: 'Live workspace data backed by the API',
     },
     settings: {
       title: 'Workspace preferences',
-      subtitle: 'Tune the interface for different testing and daily collaboration scenarios.',
+      subtitle: 'Tune the interface for testing, review, and everyday collaboration.',
       language: 'Language',
       languageHint: 'Switch UI copy between English and Simplified Chinese.',
       theme: 'Appearance',
@@ -238,28 +302,42 @@ export const translations: Record<Locale, AppTranslations> = {
     },
     overview: {
       title: 'Workspace overview',
-      subtitle: 'A single place to scan team momentum before you drop into execution.',
+      subtitle: 'A single place to scan team momentum before dropping into execution.',
       cards: {
         teammates: 'Teammates',
         activeTasks: 'Active tasks',
         todayMeetings: 'Today meetings',
-        sharedFiles: 'Shared assets',
+        sharedFiles: 'Shared files',
       },
       sections: {
         priorities: 'Priority work',
         prioritiesHint: 'Tasks that need movement across the team this week.',
         agenda: 'Today agenda',
-        agendaHint: 'Shared meetings seeded for collaboration walkthroughs.',
-        docs: 'Ready-to-share docs',
-        docsHint: 'Artifacts that make the workspace feel more than just chat.',
+        agendaHint: 'Meetings and handoffs ready for execution.',
+        docs: 'Shared assets',
+        docsHint: 'Files, briefs, and references people can act on.',
       },
+      quickActions: 'Quick actions',
+      quickActionsHint: 'Every card and section can jump into a fuller workspace module.',
+      openSection: 'Open module',
       noUsers: 'No teammate profiles were returned from the backend yet.',
     },
     tasks: {
       title: 'Task board',
-      subtitle: 'A lightweight execution lane for planning, delivery, review, and completion.',
+      subtitle: 'Create, move, share, and clear work items without leaving the workspace.',
+      addTask: 'Add task',
+      addHint: 'Use this lightweight board for planning, execution, review, and completion.',
+      titleLabel: 'Task title',
+      summaryLabel: 'Summary',
+      projectLabel: 'Project',
+      priorityLabel: 'Priority',
+      createAction: 'Create task',
       advance: 'Move forward',
       reset: 'Reset',
+      deleteAction: 'Delete',
+      shareAction: 'Share',
+      empty: 'No tasks in this lane yet.',
+      sharedCount: 'Shares',
       statuses: {
         planned: 'Planned',
         in_progress: 'In progress',
@@ -277,7 +355,17 @@ export const translations: Record<Locale, AppTranslations> = {
     },
     schedule: {
       title: 'Schedule',
-      subtitle: 'The day view keeps meetings and handoffs visible across the workspace.',
+      subtitle: 'Add, share, and trim events so the day view keeps handoffs visible.',
+      addEvent: 'Add event',
+      addHint: 'Seeded meetings cover acceptance flows, and you can create more for walkthroughs.',
+      titleLabel: 'Event title',
+      detailLabel: 'Details',
+      ownerLabel: 'Host',
+      createAction: 'Create event',
+      deleteAction: 'Delete',
+      shareAction: 'Share',
+      empty: 'No events scheduled yet.',
+      sharedCount: 'Shares',
       starts: 'Starts',
       duration: 'Duration',
       room: 'Room',
@@ -286,9 +374,19 @@ export const translations: Record<Locale, AppTranslations> = {
     },
     files: {
       title: 'Files and knowledge',
-      subtitle: 'Shared documents, briefs, and operating references for the team.',
-      updated: 'Updated',
+      subtitle: 'Upload, open, share, and remove documents from the workspace library.',
+      uploadAction: 'Upload file',
+      uploadHint: 'Seeded references live beside actual uploads from the backend file service.',
       owner: 'Owner',
+      updated: 'Updated',
+      attachmentLabel: 'Attachment',
+      sharedCount: 'Shares',
+      deleteAction: 'Delete',
+      shareAction: 'Share',
+      openAction: 'Open',
+      sourceSeed: 'Seeded',
+      sourceUpload: 'Uploaded',
+      empty: 'No documents are available yet.',
       categories: {
         draft: 'Draft',
         review: 'Review',
@@ -297,21 +395,25 @@ export const translations: Record<Locale, AppTranslations> = {
     },
     directory: {
       title: 'People directory',
-      subtitle: 'Live user records from the backend, enriched with seeded team context for acceptance.',
-      searchPlaceholder: 'Search by username, nickname, or email',
+      subtitle: 'Search live employee records by name, phone, title, and department.',
+      searchPlaceholder: 'Search by name, phone, title, employee number, or department',
+      searchHint: 'The department filter narrows backend results before the free-text search applies.',
+      allDepartments: 'All departments',
       idLabel: 'User ID',
       emailLabel: 'Email',
       phoneLabel: 'Phone',
-      roleLabel: 'Role',
+      roleLabel: 'Title',
       departmentLabel: 'Department',
       locationLabel: 'Location',
-      focusLabel: 'Focus',
+      focusLabel: 'Bio',
+      employeeNoLabel: 'Employee No.',
+      bioLabel: 'Notes',
       noResults: 'No matching teammates.',
       currentUser: 'You',
     },
     chat: {
       title: 'Team chat',
-      subtitle: 'Messaging now lives inside a broader workspace instead of being the whole product.',
+      subtitle: 'Direct chats and group rooms now sit inside a broader collaboration workspace.',
       connectionOn: 'Connected',
       connectionOff: 'Disconnected',
       newConversation: 'New conversation',
@@ -346,6 +448,18 @@ export const translations: Record<Locale, AppTranslations> = {
       invalidGroup: 'Please select at least one teammate.',
       noTeamMembers: 'No teammate accounts are available yet.',
       memberCount: 'members',
+      announcementTitle: 'Announcement',
+      announcementPlaceholder: 'Write a group update, notice, or collaboration rule.',
+      announcementSave: 'Save announcement',
+      announcementSaved: 'Announcement saved.',
+      groupFilesTitle: 'Group files',
+      uploadFile: 'Upload to group',
+      noFiles: 'No files in this group yet.',
+      shareFile: 'Share link',
+      deleteFile: 'Delete file',
+      uploadSuccess: 'Group file uploaded.',
+      uploadFailure: 'Unable to upload the group file.',
+      saveFailure: 'Unable to update the group announcement.',
     },
     status: {
       online: 'Online',
@@ -363,10 +477,17 @@ export const translations: Record<Locale, AppTranslations> = {
       unavailable: '暂无',
       enabled: '开启',
       disabled: '关闭',
+      delete: '删除',
+      share: '分享',
+      save: '保存',
+      open: '打开',
+      upload: '上传',
+      add: '新增',
+      close: '关闭',
     },
     login: {
       title: '登录 WorkPal',
-      subtitle: '可直接使用预置验收账号，或登录你自己的工作区账号。',
+      subtitle: '可以直接使用预置验收账号，或登录你自己的工作区账号。',
       username: '用户名',
       password: '密码',
       usernamePlaceholder: '请输入用户名',
@@ -382,9 +503,9 @@ export const translations: Record<Locale, AppTranslations> = {
       useAccount: '填入账号',
       helperTitle: '登录后可验收的内容',
       helperItems: [
-        '可在总览、聊天、任务、日程、文件、通讯录之间切换。',
-        '可使用预置员工创建私聊和办公群组。',
-        '可切换中英文、深浅色、消息提示音与界面密度设置。',
+        '可以在总览、沟通、任务、日程、文件、通讯录之间切换。',
+        '可以使用预置员工创建私聊和办公群组。',
+        '可以切换中英文、深浅色、消息提示音与界面密度设置。',
       ],
     },
     navigation: {
@@ -401,7 +522,7 @@ export const translations: Record<Locale, AppTranslations> = {
       preferences: '偏好设置',
       signOut: '退出登录',
       datePrefix: '今天',
-      liveData: '后端实时用户数据',
+      liveData: '当前页面数据由后端接口驱动',
     },
     settings: {
       title: '工作台偏好设置',
@@ -418,37 +539,51 @@ export const translations: Record<Locale, AppTranslations> = {
       densityHint: '在需要更高信息密度时压缩页面间距。',
       comfortable: '舒适',
       compact: '紧凑',
-      reset: '恢复默认设置',
+      reset: '重置偏好',
       close: '完成',
     },
     overview: {
       title: '工作台总览',
-      subtitle: '先扫一眼团队状态，再进入具体执行模块。',
+      subtitle: '先看清团队当下在推进什么，再进入具体执行模块。',
       cards: {
         teammates: '团队成员',
         activeTasks: '进行中任务',
         todayMeetings: '今日会议',
-        sharedFiles: '共享资料',
+        sharedFiles: '共享文件',
       },
       sections: {
-        priorities: '重点事项',
-        prioritiesHint: '本周需要团队协同推进的任务。',
+        priorities: '重点工作',
+        prioritiesHint: '本周需要多人协同推进的事项。',
         agenda: '今日安排',
-        agendaHint: '用于联调验收的共享会议与交接节奏。',
-        docs: '可共享文档',
-        docsHint: '让系统不止有聊天，还具备办公协作的文档感。',
+        agendaHint: '当前可直接进入执行的会议与交接事项。',
+        docs: '共享资料',
+        docsHint: '可以被团队直接打开和传阅的文件与说明。',
       },
-      noUsers: '后端暂未返回可展示的成员资料。',
+      quickActions: '快捷入口',
+      quickActionsHint: '每张卡片和每个模块区块都可以跳到对应的详细界面。',
+      openSection: '进入模块',
+      noUsers: '后端暂时没有返回任何成员档案。',
     },
     tasks: {
       title: '任务看板',
-      subtitle: '用轻量执行流覆盖规划、推进、评审与完成。',
-      advance: '推进到下一列',
+      subtitle: '可以在工作台内直接新增、推进、分享和删除任务。',
+      addTask: '新增任务',
+      addHint: '这里适合放计划、执行、评审和完成这几个基本阶段的事项。',
+      titleLabel: '任务标题',
+      summaryLabel: '任务说明',
+      projectLabel: '所属项目',
+      priorityLabel: '优先级',
+      createAction: '创建任务',
+      advance: '推进状态',
       reset: '重置',
+      deleteAction: '删除',
+      shareAction: '分享',
+      empty: '当前列还没有任务。',
+      sharedCount: '分享次数',
       statuses: {
-        planned: '待规划',
+        planned: '计划中',
         in_progress: '进行中',
-        review: '待评审',
+        review: '评审中',
         done: '已完成',
       },
       priorities: {
@@ -456,81 +591,117 @@ export const translations: Record<Locale, AppTranslations> = {
         medium: '中',
         low: '低',
       },
-      due: '截止',
+      due: '截止日期',
       owner: '负责人',
       teammates: '协作者',
     },
     schedule: {
       title: '日程',
-      subtitle: '把会议与交接放在工作台里，协作节奏才完整。',
+      subtitle: '新增、分享和清理会议安排，让协作节奏保持可见。',
+      addEvent: '新增日程',
+      addHint: '预置会议覆盖验收流程，你也可以继续加自己的演示或联调安排。',
+      titleLabel: '日程标题',
+      detailLabel: '日程说明',
+      ownerLabel: '主持人',
+      createAction: '创建日程',
+      deleteAction: '删除',
+      shareAction: '分享',
+      empty: '当前还没有安排日程。',
+      sharedCount: '分享次数',
       starts: '开始时间',
       duration: '时长',
-      room: '会议地点',
-      attendees: '参会人',
+      room: '地点',
+      attendees: '参与人',
       minutes: '分钟',
     },
     files: {
-      title: '文件与知识',
-      subtitle: '共享文档、运营简报与团队知识都能在这里集中查看。',
-      updated: '更新于',
+      title: '文件与资料',
+      subtitle: '可以上传、打开、分享和删除工作台中的文件资料。',
+      uploadAction: '上传文件',
+      uploadHint: '预置资料和真正走后端文件服务上传的文件会一起显示。',
       owner: '负责人',
+      updated: '更新时间',
+      attachmentLabel: '附件',
+      sharedCount: '分享次数',
+      deleteAction: '删除',
+      shareAction: '分享',
+      openAction: '打开',
+      sourceSeed: '预置资料',
+      sourceUpload: '已上传',
+      empty: '当前还没有任何文件。',
       categories: {
         draft: '草稿',
         review: '评审中',
-        ready: '可用',
+        ready: '可发布',
       },
     },
     directory: {
       title: '通讯录',
-      subtitle: '基于后端实时用户列表，并补足验收所需的团队角色信息。',
-      searchPlaceholder: '按用户名、昵称或邮箱搜索',
+      subtitle: '按姓名、电话、职称和部门搜索实时员工档案。',
+      searchPlaceholder: '搜索姓名、电话、职称、工号或部门',
+      searchHint: '左侧部门筛选会先收窄后端结果，再叠加关键字模糊匹配。',
+      allDepartments: '全部部门',
       idLabel: '用户 ID',
       emailLabel: '邮箱',
       phoneLabel: '电话',
-      roleLabel: '角色',
+      roleLabel: '职称',
       departmentLabel: '部门',
-      locationLabel: '地点',
-      focusLabel: '当前关注',
-      noResults: '没有匹配的成员。',
+      locationLabel: '办公地点',
+      focusLabel: '简介',
+      employeeNoLabel: '工号',
+      bioLabel: '备注',
+      noResults: '没有找到匹配的成员。',
       currentUser: '当前账号',
     },
     chat: {
-      title: '团队沟通',
-      subtitle: '聊天被纳入完整工作台，而不是产品的全部。',
+      title: '沟通',
+      subtitle: '私聊和群组只是工作台的一部分，但也要能完整支撑协作。',
       connectionOn: '已连接',
       connectionOff: '未连接',
       newConversation: '新建会话',
       conversations: '个会话',
-      noConversations: '还没有会话。',
-      selectConversation: '选择一个会话开始沟通。',
+      noConversations: '当前还没有会话。',
+      selectConversation: '请选择一个会话开始沟通。',
       groupConversation: '群组会话',
       directConversation: '私聊会话',
       groupChat: '群聊',
       directChatPrefix: '私聊',
       searchPlaceholder: '搜索消息',
       searchAction: '搜索',
-      clearAction: '清除',
-      searching: '正在搜索消息...',
-      noSearchResults: '没有找到匹配的消息。',
-      noMessages: '暂时没有消息。',
+      clearAction: '清空',
+      searching: '消息搜索中...',
+      noSearchResults: '没有找到匹配消息。',
+      noMessages: '当前还没有消息。',
       writeMessage: '输入消息',
       send: '发送',
       createTitle: '创建会话',
-      createSubtitle: '可直接发起私聊，或用预置员工账号创建办公群组。',
+      createSubtitle: '可以发起私聊，也可以用预置员工创建办公群组。',
       direct: '私聊',
       group: '群组',
       directTarget: '选择成员',
-      directTargetHint: '选择一位员工，快速建立私聊。',
+      directTargetHint: '选择一个员工账号，创建一对一私聊。',
       groupName: '群组名称',
-      groupNamePlaceholder: '可选的群组名称',
+      groupNamePlaceholder: '可选，未填写则使用默认群名',
       groupMembers: '选择群成员',
-      groupMembersHint: '至少选择一位成员加入群组。',
+      groupMembersHint: '至少选择一位成员加入该群组。',
       createAction: '创建',
       creating: '创建中...',
       invalidDirect: '请选择一位成员。',
       invalidGroup: '请至少选择一位成员。',
-      noTeamMembers: '暂时没有可用的成员账号。',
+      noTeamMembers: '当前没有可用的团队成员账号。',
       memberCount: '名成员',
+      announcementTitle: '群公告',
+      announcementPlaceholder: '写一条群公告、协作规则或本轮推进说明。',
+      announcementSave: '保存公告',
+      announcementSaved: '群公告已保存。',
+      groupFilesTitle: '群文件',
+      uploadFile: '上传到群组',
+      noFiles: '当前群组还没有文件。',
+      shareFile: '分享链接',
+      deleteFile: '删除文件',
+      uploadSuccess: '群文件上传成功。',
+      uploadFailure: '群文件上传失败。',
+      saveFailure: '保存群公告失败。',
     },
     status: {
       online: '在线',

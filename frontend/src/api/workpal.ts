@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './request'
+import { apiDelete, apiGet, apiPost, apiPut } from './request'
 import type {
   ChatMessage,
   Conversation,
@@ -7,7 +7,7 @@ import type {
   PageData,
   SearchResult,
 } from '../types/chat'
-import type { WorkspaceUser } from '../types/workspace'
+import type { ConversationFile, Department, WorkspaceUser } from '../types/workspace'
 
 interface LoginPayload {
   username: string
@@ -17,6 +17,11 @@ interface LoginPayload {
 interface SendMessagePayload {
   type: number
   content: string
+}
+
+interface UpdateConversationPayload {
+  name?: string
+  announcement?: string
 }
 
 type CreateConversationPayload =
@@ -43,14 +48,24 @@ export const workpalApi = {
     return apiGet<WorkspaceUser>('/users/me')
   },
 
-  async listUsers(pageSize = 100): Promise<WorkspaceUser[]> {
+  async listUsers(pageSize = 100, query = '', departmentId?: number): Promise<WorkspaceUser[]> {
     const data = await apiGet<WorkspaceUser[] | PageData<WorkspaceUser>>('/users', {
       params: {
         page: 1,
         page_size: pageSize,
+        q: query || undefined,
+        department_id: departmentId || undefined,
       },
     })
     return unwrapPageData(data)
+  },
+
+  listDepartments() {
+    return apiGet<Department[]>('/departments')
+  },
+
+  listUserFiles() {
+    return apiGet<ConversationFile[]>('/files')
   },
 
   async listConversations(): Promise<Conversation[]> {
@@ -87,10 +102,47 @@ export const workpalApi = {
           }
         : {
             type: 2,
-            name: draft.name || 'Group chat',
+            name: draft.name,
             member_ids: draft.memberIds,
           }
 
     return apiPost<Conversation, CreateConversationPayload>('/conversations', payload)
+  },
+
+  updateConversation(convID: number, payload: UpdateConversationPayload) {
+    return apiPut<Conversation, UpdateConversationPayload>(`/conversations/${convID}`, payload)
+  },
+
+  updateConversationAnnouncement(convID: number, announcement: string) {
+    return apiPut<Conversation, Pick<UpdateConversationPayload, 'announcement'>>(`/conversations/${convID}/announcement`, {
+      announcement,
+    })
+  },
+
+  listConversationFiles(convID: number) {
+    return apiGet<ConversationFile[]>(`/conversations/${convID}/files`)
+  },
+
+  uploadConversationFile(convID: number, file: File) {
+    const form = new FormData()
+    form.set('conv_id', String(convID))
+    form.set('file', file)
+    return apiPost<ConversationFile, FormData>('/files/upload', form)
+  },
+
+  uploadUserFile(file: File) {
+    const form = new FormData()
+    form.set('file', file)
+    return apiPost<ConversationFile, FormData>('/files/upload', form)
+  },
+
+  deleteFile(fileID: number) {
+    return apiDelete<ConversationFile>(`/files/${fileID}`)
+  },
+
+  shareFile(fileID: number) {
+    return apiPost<{ file_id: number; name: string; download_path: string; share_text: string }, undefined>(
+      `/files/${fileID}/share`,
+    )
   },
 }

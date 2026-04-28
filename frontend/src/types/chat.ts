@@ -18,6 +18,8 @@ export interface Conversation {
   name: string
   avatar_url?: string
   owner_id: number
+  announcement?: string
+  announcement_updated_at?: string
   created_at: string
   updated_at: string
 }

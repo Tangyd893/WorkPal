@@ -11,6 +11,11 @@ type UserService struct {
 	userRepo *repo.UserRepo
 }
 
+type DirectoryFilter struct {
+	Query        string
+	DepartmentID int64
+}
+
 func NewUserService(userRepo *repo.UserRepo) *UserService {
 	return &UserService{userRepo: userRepo}
 }
@@ -24,6 +29,10 @@ type UpdateProfileReq struct {
 
 func (s *UserService) GetByID(ctx context.Context, id int64) (*model.User, error) {
 	return s.userRepo.GetByID(ctx, id)
+}
+
+func (s *UserService) GetDirectoryByID(ctx context.Context, id int64) (*model.DirectoryUser, error) {
+	return s.userRepo.GetDirectoryByID(ctx, id)
 }
 
 func (s *UserService) UpdateProfile(ctx context.Context, userID int64, req *UpdateProfileReq) (*model.User, error) {
@@ -56,12 +65,25 @@ func (s *UserService) ListUsers(ctx context.Context, page, pageSize int) ([]*mod
 	return s.userRepo.List(ctx, offset, pageSize)
 }
 
+func (s *UserService) ListDirectoryUsers(ctx context.Context, page, pageSize int, filter DirectoryFilter) ([]*model.DirectoryUser, int64, error) {
+	offset := (page - 1) * pageSize
+	return s.userRepo.ListDirectoryUsers(ctx, repo.DirectoryFilter{
+		Query:        filter.Query,
+		DepartmentID: filter.DepartmentID,
+		Offset:       offset,
+		Limit:        pageSize,
+	})
+}
+
+func (s *UserService) ListDepartments(ctx context.Context) ([]*model.Department, error) {
+	return s.userRepo.ListDepartments(ctx)
+}
+
 func (s *UserService) Search(ctx context.Context, keyword string, page, pageSize int) ([]*model.User, int64, error) {
 	offset := (page - 1) * pageSize
 	return s.userRepo.Search(ctx, keyword, offset, pageSize)
 }
 
-// GetCurrentUser 获取当前登录用户信息（从 context 的 userID）
 func (s *UserService) GetCurrentUser(ctx context.Context, userID int64) (*model.User, error) {
 	return s.userRepo.GetByID(ctx, userID)
 }

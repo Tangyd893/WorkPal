@@ -9,6 +9,7 @@ import (
 
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
+	"github.com/Tangyd893/WorkPal/backend/internal/file/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/file/service"
 	"github.com/gin-gonic/gin"
 )
@@ -26,12 +27,8 @@ func NewFileHandler(fileSvc *service.FileService, convSvc conversationAuthorizer
 	return &FileHandler{fileSvc: fileSvc, convSvc: convSvc}
 }
 
-// Upload 上传文件
-// POST /api/v1/files/upload
 func (h *FileHandler) Upload(c *gin.Context) {
 	userID := c.GetInt64("userID")
-
-	// 支持表单参数指定会话 ID
 	convID, _ := strconv.ParseInt(c.PostForm("conv_id"), 10, 64)
 	if convID > 0 && !h.ensureConversationMember(c, convID, userID) {
 		return
@@ -43,28 +40,20 @@ func (h *FileHandler) Upload(c *gin.Context) {
 		return
 	}
 
-	f, err := h.fileSvc.Upload(c.Request.Context(), userID, convID, file)
+	uploadedFile, err := h.fileSvc.Upload(c.Request.Context(), userID, convID, file)
 	if err != nil {
 		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	response.Success(c, gin.H{
-		"id":           f.ID,
-		"name":         f.Name,
-		"size":         f.Size,
-		"content_type": f.ContentType,
-		"created_at":   f.CreatedAt,
-	})
+	response.Success(c, h.serializeFile(c, uploadedFile))
 }
 
-// Download 下载文件
-// GET /api/v1/files/:id
 func (h *FileHandler) Download(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	fileID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的文件ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的文件 ID")
 		return
 	}
 
@@ -79,28 +68,75 @@ func (h *FileHandler) Download(c *gin.Context) {
 		}
 	}
 
-	rc, f, err := h.fileSvc.Download(c.Request.Context(), fileID)
+	reader, file, err := h.fileSvc.Download(c.Request.Context(), fileID)
 	if err != nil {
 		response.FailWithMessage(c, http.StatusNotFound, "文件不存在")
 		return
 	}
-	defer rc.Close()
+	defer reader.Close()
 
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, f.Name))
-	c.Header("Content-Type", f.ContentType)
-	c.Header("Content-Length", strconv.FormatInt(f.Size, 10))
-	if _, err := io.Copy(c.Writer, rc); err != nil {
-		return
-	}
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.Name))
+	c.Header("Content-Type", file.ContentType)
+	c.Header("Content-Length", strconv.FormatInt(file.Size, 10))
+	_, _ = io.Copy(c.Writer, reader)
 }
 
-// ListByConv 获取会话文件列表
-// GET /api/v1/conversations/:id/files
+func (h *FileHandler) Delete(c *gin.Context) {
+	userID := c.GetInt64("userID")
+	fileID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的文件 ID")
+		return
+	}
+
+	file, err := h.fileSvc.GetByID(c.Request.Context(), fileID)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusNotFound, "文件不存在")
+		return
+	}
+	if file.UserID != userID {
+		response.FailWithMessage(c, http.StatusForbidden, "无权删除该文件")
+		return
+	}
+
+	deletedFile, err := h.fileSvc.Delete(c.Request.Context(), fileID)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, h.serializeFile(c, deletedFile))
+}
+
+func (h *FileHandler) Share(c *gin.Context) {
+	userID := c.GetInt64("userID")
+	fileID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的文件 ID")
+		return
+	}
+
+	file, err := h.fileSvc.GetByID(c.Request.Context(), fileID)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusNotFound, "文件不存在")
+		return
+	}
+	if file.UserID != userID && (file.ConvID <= 0 || !h.ensureConversationMember(c, file.ConvID, userID)) {
+		return
+	}
+
+	response.Success(c, gin.H{
+		"file_id":       file.ID,
+		"name":          file.Name,
+		"download_path": fmt.Sprintf("/api/v1/files/%d", file.ID),
+		"share_text":    fmt.Sprintf("%s (%s)", file.Name, fmt.Sprintf("/api/v1/files/%d", file.ID)),
+	})
+}
+
 func (h *FileHandler) ListByConv(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 	if !h.ensureConversationMember(c, convID, userID) {
@@ -117,11 +153,13 @@ func (h *FileHandler) ListByConv(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, files)
+	payload := make([]gin.H, 0, len(files))
+	for _, file := range files {
+		payload = append(payload, h.serializeFile(c, file))
+	}
+	response.Success(c, payload)
 }
 
-// ListByUser 获取用户文件列表
-// GET /api/v1/files
 func (h *FileHandler) ListByUser(c *gin.Context) {
 	userID := c.GetInt64("userID")
 
@@ -135,22 +173,27 @@ func (h *FileHandler) ListByUser(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, files)
+	payload := make([]gin.H, 0, len(files))
+	for _, file := range files {
+		payload = append(payload, h.serializeFile(c, file))
+	}
+	response.Success(c, payload)
 }
 
-// RegisterRoutes 注册路由
 func (h *FileHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth := rg.Group("")
 	auth.Use(middleware.AuthRequired())
 	auth.POST("/files/upload", h.Upload)
 	auth.GET("/files", h.ListByUser)
 	auth.GET("/files/:id", h.Download)
+	auth.DELETE("/files/:id", h.Delete)
+	auth.POST("/files/:id/share", h.Share)
 	auth.GET("/conversations/:id/files", h.ListByConv)
 }
 
 func (h *FileHandler) ensureConversationMember(c *gin.Context, convID, userID int64) bool {
 	if h.convSvc == nil {
-		response.FailWithMessage(c, http.StatusForbidden, "无权限访问该会话资源")
+		response.FailWithMessage(c, http.StatusForbidden, "无权访问该会话资源")
 		return false
 	}
 	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
@@ -159,8 +202,34 @@ func (h *FileHandler) ensureConversationMember(c *gin.Context, convID, userID in
 		return false
 	}
 	if !isMember {
-		response.FailWithMessage(c, http.StatusForbidden, "无权限访问该会话资源")
+		response.FailWithMessage(c, http.StatusForbidden, "无权访问该会话资源")
 		return false
 	}
 	return true
+}
+
+func (h *FileHandler) serializeFile(c *gin.Context, file *model.File) gin.H {
+	return gin.H{
+		"id":            file.ID,
+		"user_id":       file.UserID,
+		"conv_id":       file.ConvID,
+		"name":          file.Name,
+		"size":          file.Size,
+		"content_type":  file.ContentType,
+		"mime_type":     file.MimeType,
+		"created_at":    file.CreatedAt,
+		"download_path": fmt.Sprintf("/api/v1/files/%d", file.ID),
+		"share_path":    fmt.Sprintf("/api/v1/files/%d/share", file.ID),
+		"download_url":  fmt.Sprintf("%s://%s/api/v1/files/%d", requestScheme(c), c.Request.Host, file.ID),
+	}
+}
+
+func requestScheme(c *gin.Context) string {
+	if c.Request.TLS != nil {
+		return "https"
+	}
+	if forwarded := c.GetHeader("X-Forwarded-Proto"); forwarded != "" {
+		return forwarded
+	}
+	return "http"
 }

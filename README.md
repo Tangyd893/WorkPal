@@ -1,106 +1,107 @@
 # WorkPal
 
-WorkPal 是一个基于 Go + React 的办公协作平台示例项目。当前版本除了实时沟通，还补齐了更完整的工作台形态：
+WorkPal is a Go + React office collaboration demo. The current version is no longer just a chat shell. It now includes:
 
-- 登录鉴权、用户资料、用户目录
-- 私聊 / 群聊 / 消息搜索 / WebSocket 实时通信
-- 工作台总览、任务看板、日程、文件与知识面板
-- 中英文切换、深浅色主题、消息提示音、紧凑密度设置
-- 本地开发环境的预置验收账号与员工账号
+- seeded admin and employee accounts for acceptance
+- bilingual UI: `English / 简体中文`
+- light and dark theme, message sound toggle, compact density toggle
+- overview, chat, tasks, schedule, files, and directory modules
+- department and employee seed data in the backend database
+- direct chat, group chat, group announcement, and group files
 
-这份 README 的快速开始步骤，已按仓库当前代码重新校对过，目标就是让你可以直接照着启动并验收。
+This README is written for the current code in this repository and is intended to be followed step by step for local startup and debugging.
 
-## 运行环境
+## Stack
 
-- Go 1.22+
-- Node.js 18+
+- Backend: Go, Gin, GORM, PostgreSQL, Redis, Bleve
+- Frontend: React, Vite, Zustand
+- File storage: local storage by default, MinIO supported
+- Realtime: WebSocket
+
+## Prerequisites
+
+- Go `1.22+`
+- Node.js `18+`
 - npm
-- Docker Desktop / Docker Engine
+- Docker Desktop or Docker Engine
 
-建议先确认 Docker 已真正启动：
+Before doing anything else, confirm Docker is actually running:
 
 ```powershell
 docker version
 ```
 
-只有在输出里同时看到 `Client` 和 `Server` 时，再继续后面的步骤。
+Only continue if the output contains both `Client` and `Server`.
 
-## 默认端口
+## Default Ports
 
-| 服务 | 地址 | 说明 |
+| Service | URL | Notes |
 |---|---|---|
-| 前端 | `http://localhost:3000` | Vite dev server |
-| 后端 | `http://localhost:8080` | Gin API |
-| 健康检查 | `http://localhost:8080/health` | 检查 PostgreSQL / Redis |
+| Frontend | `http://localhost:3000` | Vite dev server |
+| Backend | `http://localhost:8080` | Gin API |
+| Health check | `http://localhost:8080/health` | checks PostgreSQL and Redis |
 | PostgreSQL | `localhost:5432` | `workpal / workpal123` |
-| Redis | `localhost:6379` | 默认无密码 |
-| MinIO API | `http://localhost:9000` | 对象存储 |
+| Redis | `localhost:6379` | no password by default |
+| MinIO API | `http://localhost:9000` | object storage |
 | MinIO Console | `http://localhost:9001` | `workpal / workpal123456` |
 
-## 快速开始
+## Quick Start
 
-下面默认使用 Windows PowerShell。macOS / Linux 下把命令语法换成对应 shell 即可。
+### 1. Start infrastructure dependencies
 
-### 1. 启动依赖服务
-
-在仓库根目录执行：
+From the repo root:
 
 ```powershell
 docker compose -f docker/docker-compose.yaml up -d
 docker compose -f docker/docker-compose.yaml ps
 ```
 
-预期看到 `postgres`、`redis`、`minio` 都是 `Up` / `healthy`。
+Expected result:
 
-### 2. 准备后端配置
+- `postgres` is `Up` or `healthy`
+- `redis` is `Up`
+- `minio` is `Up`
 
-后端按下面顺序读取配置：
+### 2. Start the backend
 
-1. `CONFIG_PATH` 指定的文件
-2. `backend/configs/config.yaml`
-3. `backend/configs/config.example.yaml`
-
-因此，**即使你不复制 `config.yaml`，项目也能直接按样例配置跑起来**。
-
-如果你想改本地配置，再复制一份：
-
-```powershell
-Copy-Item backend\configs\config.example.yaml backend\configs\config.yaml
-```
-
-### 3. 启动后端
-
-新开一个终端：
+Open a new terminal:
 
 ```powershell
 cd backend
 go run ./cmd/server
 ```
 
-后端启动后，项目会自动做两件事：
+Important startup behavior:
 
-1. 执行 GORM `AutoMigrate`
-2. 在 `server.mode != release` 时自动确保开发验收账号存在
+1. The backend runs `AutoMigrate` on startup.
+2. In non-`release` mode it automatically ensures the seeded departments, employees, and acceptance accounts exist.
+3. You do **not** need to create `backend/configs/config.yaml` unless you want to override the sample config.
 
-先验证后端是否可用：
+Backend config lookup order:
+
+1. `CONFIG_PATH`
+2. `backend/configs/config.yaml`
+3. `backend/configs/config.example.yaml`
+
+Quick verification:
 
 ```powershell
 Invoke-WebRequest http://localhost:8080/health -UseBasicParsing
 Invoke-WebRequest http://localhost:8080/ -UseBasicParsing
 ```
 
-预期：
+Expected result:
 
-- `/health` 返回 `200`
-- `/` 返回类似：
+- `/health` returns HTTP `200`
+- `/` returns JSON similar to:
 
 ```json
 {"name":"WorkPal","status":"running","version":"0.2.0"}
 ```
 
-### 4. 启动前端
+### 3. Start the frontend
 
-再开一个终端：
+Open another terminal:
 
 ```powershell
 cd frontend
@@ -108,29 +109,31 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-然后打开：
+Then open:
 
 ```text
 http://localhost:3000
 ```
 
-前端本地代理规则：
+Frontend proxy rules:
 
 - `/api/*` -> `http://localhost:8080`
 - `/ws` -> `ws://localhost:8080`
 
-### 5. 使用预置验收账号登录
+## Acceptance Accounts
 
-只要后端是按默认开发模式启动，就会自动确保以下账号存在：
+When the backend is started in the default development mode, it automatically ensures these accounts exist:
 
-| 角色 | 用户名 | 密码 | 用途 |
+| Role | Username | Password | Suggested use |
 |---|---|---|---|
-| 管理员 | `admin` | `admin123` | 总览、设置、全局验收 |
-| 员工 | `emma.chen` | `workpal123` | 运营协作测试 |
-| 员工 | `liam.wang` | `workpal123` | 工程协作测试 |
-| 员工 | `sofia.zhao` | `workpal123` | 设计 / 验收测试 |
+| Admin | `admin` | `admin123` | full acceptance and settings checks |
+| Employee | `emma.chen` | `workpal123` | operations and collaboration flows |
+| Employee | `liam.wang` | `workpal123` | engineering and group tests |
+| Employee | `sofia.zhao` | `workpal123` | design and release-readiness tests |
 
-你可以先直接验证其中一个账号是否能登录：
+Seeded org data also includes departments and employee profiles, so directory search and department filters work out of the box.
+
+If you want to verify login through the API first:
 
 ```powershell
 $body = @{
@@ -145,57 +148,89 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-返回体里的 `code` 应为 `0`，并带有 `token`。
+Expected result:
 
-### 6. 建议的验收路径
+- `code` is `0`
+- `data.token` is present
 
-登录前端后，建议按下面顺序验收：
+## Recommended Acceptance Path
+
+After logging in on the frontend, use this order:
 
 1. `Overview / 总览`
-   - 看工作台摘要卡片是否正常渲染
+   - confirm the overview loads
+   - click the metric cards or module buttons and verify they jump to the matching module
+
 2. `Preferences / 偏好设置`
-   - 切换 `English / 简体中文`
-   - 切换浅色 / 深色主题
-   - 切换消息提示音
-   - 切换舒适 / 紧凑密度
+   - switch `English / 简体中文`
+   - switch light and dark theme
+   - toggle message sound
+   - toggle comfortable and compact density
+
 3. `Directory / 通讯录`
-   - 确认 `admin`、`emma.chen`、`liam.wang`、`sofia.zhao` 都可见
+   - verify seeded users are visible
+   - use the department filter
+   - search by title, phone, or department, not just by username
+   - example: filter `Engineering` and search `Platform Engineer`
+
 4. `Chat / 沟通`
-   - 用“新建会话”直接选择员工账号创建私聊或群组
+   - create a direct chat with `emma.chen`
+   - send a message
+   - create a group with `emma.chen` and `liam.wang`
+   - send a group message
+   - update the group announcement
+   - upload a group file
+
 5. `Tasks / 任务`
-   - 推进任务状态列，验证前端交互
+   - create a task
+   - move it across columns
+   - share it
+   - delete it
+
 6. `Schedule / 日程`
-   - 查看会议与协作节奏
+   - create an event
+   - share it
+   - delete it
+
 7. `Files / 文件`
-   - 查看共享文档与状态标签
+   - upload a personal file
+   - open it
+   - share it
+   - delete it
 
-## 当前模块说明
+## What Is Backend-Backed vs Local Demo State
 
-### 后端实时数据
+This is important for debugging expectations.
 
-下面这些能力直接走后端 API：
+### Backend-backed right now
 
-- 登录
-- 用户列表 / 当前用户
-- 私聊 / 群聊
-- 消息发送
-- 消息搜索
-- WebSocket 实时连接
+- login
+- current user
+- user list and department list
+- directory search and department filtering
+- direct chat and group chat
+- message send and message search
+- WebSocket connection
+- group announcement
+- group files
+- personal file upload, list, share, delete
 
-### 前端预置协作演示数据
+### Frontend-local demo state right now
 
-下面这些模块当前是为了补齐“办公协作平台”的产品完整性，在前端内置了演示数据与交互：
+- overview summary composition
+- task board items
+- schedule items
+- seeded knowledge cards in the files module
 
-- 工作台总览摘要
-- 任务看板
-- 日程面板
-- 文件与知识面板
+That means:
 
-这部分不会影响聊天和用户相关的真实联调，文档里也明确区分了。
+- tasks and schedule are functional in the UI, but are not persisted to the backend yet
+- files uploaded through the file service are real backend data
+- the overview module reflects current frontend state and backend-loaded people data
 
-## 一次性烟测
+## Validation Commands
 
-### 后端与前端单元 / 构建
+### Backend and frontend tests
 
 ```powershell
 cd backend
@@ -206,9 +241,9 @@ npm test
 npm run build
 ```
 
-### E2E 冒烟
+### End-to-end smoke test
 
-要求前后端都已启动：
+Make sure backend and frontend are already running, then:
 
 ```powershell
 cd frontend
@@ -216,33 +251,36 @@ npx playwright install chromium
 node ..\testing\e2e\playwright.mjs
 ```
 
-当前脚本会验证：
+The Playwright smoke test covers:
 
 - `/health`
 - `/metrics`
-- `admin` 与 `emma.chen` 的登录 API
-- 前端登录后的工作台导航
-- 语言切换
-- 通讯录中的预置成员
-- 聊天模块里的新建会话弹窗
+- seeded login API
+- private and group chat API flows
+- group announcement and group file API flows
+- frontend login
+- overview jump actions
+- directory filter and search
+- task creation
+- schedule creation
+- file upload
+- direct chat creation and send
 
-## 停止服务
+## Stop Services
 
-### 停止前后端
+Stop frontend and backend with `Ctrl + C` in their terminals.
 
-在对应终端按 `Ctrl + C`。
-
-### 停止 Docker 依赖
+Stop Docker dependencies from the repo root:
 
 ```powershell
 docker compose -f docker/docker-compose.yaml down
 ```
 
-## 相关文档
+## Related Docs
 
-- [backend/README.md](backend/README.md)
 - [frontend/README.md](frontend/README.md)
 - [docs/acceptance-testing.md](docs/acceptance-testing.md)
+- [docs/项目技术特点学习笔记.md](docs/项目技术特点学习笔记.md)
 
 ## License
 

@@ -15,7 +15,6 @@ import (
 	"github.com/minio/minio-go/v6"
 )
 
-// FileStore 文件存储接口
 type FileStore interface {
 	Upload(ctx context.Context, key string, r io.Reader, size int64, contentType string) error
 	Download(ctx context.Context, key string) (io.ReadCloser, error)
@@ -23,7 +22,6 @@ type FileStore interface {
 	GetURL(ctx context.Context, key string) (string, error)
 }
 
-// LocalFileStore 本地文件系统存储
 type LocalFileStore struct {
 	BasePath string
 }
@@ -61,7 +59,6 @@ func (s *LocalFileStore) GetURL(ctx context.Context, key string) (string, error)
 	return "/files/" + key, nil
 }
 
-// MinIOFileStore MinIO 对象存储
 type MinIOFileStore struct {
 	client   *minio.Client
 	bucket   string
@@ -109,7 +106,6 @@ func (s *MinIOFileStore) GetURL(ctx context.Context, key string) (string, error)
 	return fmt.Sprintf("%s://%s/%s/%s", protocol, s.endpoint, s.bucket, key), nil
 }
 
-// FileService 文件服务
 type FileService struct {
 	repo      *repo.FileRepo
 	store     FileStore
@@ -124,7 +120,6 @@ func NewFileService(repo *repo.FileRepo, store FileStore, maxSizeMB int) *FileSe
 	}
 }
 
-// Upload 上传文件
 func (s *FileService) Upload(ctx context.Context, userID int64, convID int64, fileHeader *multipart.FileHeader) (*model.File, error) {
 	if int(fileHeader.Size) > s.maxSizeMB*1024*1024 {
 		return nil, fmt.Errorf("文件大小超过限制 (%dMB)", s.maxSizeMB)
@@ -136,17 +131,14 @@ func (s *FileService) Upload(ctx context.Context, userID int64, convID int64, fi
 	}
 	defer src.Close()
 
-	// 生成唯一 key
 	ext := filepath.Ext(fileHeader.Filename)
 	key := fmt.Sprintf("%d/%d/%s%s", userID, convID, uuid.New().String(), ext)
 
-	// 上传到存储
 	if err := s.store.Upload(ctx, key, src, fileHeader.Size, fileHeader.Header.Get("Content-Type")); err != nil {
 		return nil, err
 	}
 
-	// 写入数据库
-	f := &model.File{
+	file := &model.File{
 		UserID:      userID,
 		ConvID:      convID,
 		Name:        fileHeader.Filename,
@@ -156,42 +148,55 @@ func (s *FileService) Upload(ctx context.Context, userID int64, convID int64, fi
 		MimeType:    fileHeader.Header.Get("Content-Type"),
 		CreatedAt:   time.Now(),
 	}
-	if err := s.repo.Create(ctx, f); err != nil {
+	if err := s.repo.Create(ctx, file); err != nil {
 		return nil, err
 	}
 
-	return f, nil
+	return file, nil
 }
 
-// GetURL 获取文件访问 URL
 func (s *FileService) GetURL(ctx context.Context, fileID int64) (string, error) {
-	f, err := s.repo.GetByID(ctx, fileID)
+	file, err := s.repo.GetByID(ctx, fileID)
 	if err != nil {
 		return "", err
 	}
-	return s.store.GetURL(ctx, f.Key)
+	return s.store.GetURL(ctx, file.Key)
 }
 
 func (s *FileService) GetByID(ctx context.Context, fileID int64) (*model.File, error) {
 	return s.repo.GetByID(ctx, fileID)
 }
 
-// Download 下载文件
 func (s *FileService) Download(ctx context.Context, fileID int64) (io.ReadCloser, *model.File, error) {
-	f, err := s.repo.GetByID(ctx, fileID)
+	file, err := s.repo.GetByID(ctx, fileID)
 	if err != nil {
 		return nil, nil, err
 	}
-	rc, err := s.store.Download(ctx, f.Key)
-	return rc, f, err
+	reader, err := s.store.Download(ctx, file.Key)
+	return reader, file, err
 }
 
-// ListByUser 用户文件列表
+func (s *FileService) Delete(ctx context.Context, fileID int64) (*model.File, error) {
+	file, err := s.repo.GetByID(ctx, fileID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.Delete(ctx, fileID); err != nil {
+		return nil, err
+	}
+
+	if err := s.store.Delete(ctx, file.Key); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	return file, nil
+}
+
 func (s *FileService) ListByUser(ctx context.Context, userID int64, offset, limit int) ([]*model.File, error) {
 	return s.repo.ListByUser(ctx, userID, offset, limit)
 }
 
-// ListByConv 会话文件列表
 func (s *FileService) ListByConv(ctx context.Context, convID int64, offset, limit int) ([]*model.File, error) {
 	return s.repo.ListByConv(ctx, convID, offset, limit)
 }

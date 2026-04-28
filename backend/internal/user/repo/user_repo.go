@@ -2,11 +2,19 @@ package repo
 
 import (
 	"context"
+	"errors"
 
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	"gorm.io/gorm"
 )
+
+type DirectoryFilter struct {
+	Query        string
+	DepartmentID int64
+	Offset       int
+	Limit        int
+}
 
 type UserRepo struct {
 	db *gorm.DB
@@ -31,7 +39,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id int64) (*model.User, error) {
 	var user model.User
 	result := r.db.WithContext(ctx).First(&user, id)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, apperrors.ErrUserNotFound
 		}
 		return nil, result.Error
@@ -43,10 +51,24 @@ func (r *UserRepo) GetByUsername(ctx context.Context, username string) (*model.U
 	var user model.User
 	result := r.db.WithContext(ctx).Where("username = ?", username).First(&user)
 	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, apperrors.ErrUserNotFound
 		}
 		return nil, result.Error
+	}
+	return &user, nil
+}
+
+func (r *UserRepo) GetDirectoryByID(ctx context.Context, id int64) (*model.DirectoryUser, error) {
+	var user model.DirectoryUser
+	err := r.directoryBaseQuery(ctx).
+		Where("u.id = ?", id).
+		First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.ErrUserNotFound
+		}
+		return nil, err
 	}
 	return &user, nil
 }
@@ -71,7 +93,44 @@ func (r *UserRepo) List(ctx context.Context, offset, limit int) ([]*model.User, 
 	return users, total, nil
 }
 
-// Search 模糊搜索用户（用户名或昵称）
+func (r *UserRepo) ListDirectoryUsers(ctx context.Context, filter DirectoryFilter) ([]*model.DirectoryUser, int64, error) {
+	if filter.Limit <= 0 {
+		filter.Limit = 20
+	}
+
+	query := r.applyDirectoryFilters(r.directoryBaseQuery(ctx), filter)
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var users []*model.DirectoryUser
+	err := query.
+		Order("u.nickname ASC, u.username ASC").
+		Offset(filter.Offset).
+		Limit(filter.Limit).
+		Find(&users).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return users, total, nil
+}
+
+func (r *UserRepo) ListDepartments(ctx context.Context) ([]*model.Department, error) {
+	var departments []*model.Department
+	err := r.db.WithContext(ctx).
+		Model(&model.Department{}).
+		Order("name ASC").
+		Find(&departments).Error
+	if err != nil {
+		return nil, err
+	}
+	return departments, nil
+}
+
+// Search retains the lightweight user lookup used by existing tests and handlers.
 func (r *UserRepo) Search(ctx context.Context, keyword string, offset, limit int) ([]*model.User, int64, error) {
 	var users []*model.User
 	var total int64
@@ -86,6 +145,54 @@ func (r *UserRepo) Search(ctx context.Context, keyword string, offset, limit int
 		return nil, 0, result.Error
 	}
 	return users, total, nil
+}
+
+func (r *UserRepo) directoryBaseQuery(ctx context.Context) *gorm.DB {
+	return r.db.WithContext(ctx).
+		Table("users AS u").
+		Select(`
+			u.id,
+			u.username,
+			u.nickname,
+			u.avatar_url,
+			u.email,
+			u.phone,
+			u.status,
+			COALESCE(e.department_id, u.department_id, 0) AS department_id,
+			COALESCE(d.name, '') AS department_name,
+			COALESCE(e.id, 0) AS employee_id,
+			COALESCE(e.employee_no, '') AS employee_no,
+			COALESCE(e.job_title, '') AS job_title,
+			COALESCE(e.office_location, '') AS office_location,
+			COALESCE(e.bio, '') AS bio,
+			u.created_at,
+			u.updated_at
+		`).
+		Joins("LEFT JOIN employees e ON e.user_id = u.id AND e.deleted_at IS NULL").
+		Joins("LEFT JOIN departments d ON d.id = COALESCE(e.department_id, u.department_id)").
+		Where("u.deleted_at IS NULL")
+}
+
+func (r *UserRepo) applyDirectoryFilters(query *gorm.DB, filter DirectoryFilter) *gorm.DB {
+	if filter.DepartmentID > 0 {
+		query = query.Where("COALESCE(e.department_id, u.department_id, 0) = ?", filter.DepartmentID)
+	}
+
+	if filter.Query != "" {
+		likeValue := "%" + filter.Query + "%"
+		query = query.Where(`
+			u.username ILIKE ? OR
+			u.nickname ILIKE ? OR
+			u.email ILIKE ? OR
+			u.phone ILIKE ? OR
+			e.employee_no ILIKE ? OR
+			e.job_title ILIKE ? OR
+			e.office_location ILIKE ? OR
+			d.name ILIKE ?
+		`, likeValue, likeValue, likeValue, likeValue, likeValue, likeValue, likeValue, likeValue)
+	}
+
+	return query
 }
 
 func isDuplicateKey(err error) bool {
@@ -105,7 +212,6 @@ func containsHelper(s, substr string) bool {
 	return false
 }
 
-// 包内哨兵错误（用于测试和跨层判断）
 var (
 	ErrUserAlreadyExists = apperrors.ErrUserAlreadyExists
 	ErrUserNotFound      = apperrors.ErrUserNotFound

@@ -95,7 +95,7 @@ export default function CreateConversationModal({
     try {
       await onSubmit({
         mode: 'group',
-        name: groupName.trim(),
+        name: groupName.trim() || labels.groupChat,
         memberIds: groupMemberIds,
       })
     } catch (submitError) {

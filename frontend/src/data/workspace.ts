@@ -1,11 +1,4 @@
-import type {
-  Locale,
-  ScheduleEvent,
-  SeedAccount,
-  SharedDocument,
-  TeamProfileMeta,
-  WorkspaceTask,
-} from '../types/workspace'
+import type { Locale, ScheduleEvent, SeedAccount, SharedDocument, WorkspaceTask } from '../types/workspace'
 
 export const seededAccountsByLocale: Record<Locale, SeedAccount[]> = {
   en: [
@@ -15,7 +8,7 @@ export const seededAccountsByLocale: Record<Locale, SeedAccount[]> = {
     { username: 'sofia.zhao', password: 'workpal123', nickname: 'Sofia Zhao', note: 'Design QA and release readiness' },
   ],
   'zh-CN': [
-    { username: 'admin', password: 'admin123', nickname: 'Administrator', note: '用于验收和管理视角联调' },
+    { username: 'admin', password: 'admin123', nickname: '管理员', note: '用于验收和管理视角联调' },
     { username: 'emma.chen', password: 'workpal123', nickname: 'Emma Chen', note: '运营协同与上线推进' },
     { username: 'liam.wang', password: 'workpal123', nickname: 'Liam Wang', note: '工程交付与后端联调' },
     { username: 'sofia.zhao', password: 'workpal123', nickname: 'Sofia Zhao', note: '设计验收与发布准备' },
@@ -34,17 +27,21 @@ const taskCatalog: Record<Locale, WorkspaceTask[]> = {
       dueDate: '2026-04-29',
       priority: 'high',
       status: 'in_progress',
+      sharedCount: 2,
+      source: 'seed',
     },
     {
       id: 'search-hardening',
-      title: 'Verify search fallback on seeded data',
-      summary: 'Confirm message search still behaves well after account bootstrap and new workspace modules.',
+      title: 'Verify directory search and group messaging',
+      summary: 'Confirm fuzzy directory filters and the repaired direct and group chat flows behave correctly.',
       project: 'Platform',
       ownerUsername: 'liam.wang',
       teammates: ['admin'],
       dueDate: '2026-04-30',
       priority: 'high',
       status: 'review',
+      sharedCount: 1,
+      source: 'seed',
     },
     {
       id: 'workspace-copy',
@@ -56,6 +53,8 @@ const taskCatalog: Record<Locale, WorkspaceTask[]> = {
       dueDate: '2026-05-01',
       priority: 'medium',
       status: 'planned',
+      sharedCount: 0,
+      source: 'seed',
     },
     {
       id: 'acceptance-script',
@@ -67,6 +66,8 @@ const taskCatalog: Record<Locale, WorkspaceTask[]> = {
       dueDate: '2026-04-30',
       priority: 'medium',
       status: 'done',
+      sharedCount: 3,
+      source: 'seed',
     },
   ],
   'zh-CN': [
@@ -80,28 +81,34 @@ const taskCatalog: Record<Locale, WorkspaceTask[]> = {
       dueDate: '2026-04-29',
       priority: 'high',
       status: 'in_progress',
+      sharedCount: 2,
+      source: 'seed',
     },
     {
       id: 'search-hardening',
-      title: '验证预置账号后的搜索回退',
-      summary: '确认消息搜索在账号引导与新工作台模块接入后仍然稳定。',
+      title: '验证通讯录搜索和群聊发信链路',
+      summary: '确认模糊搜索、部门筛选以及修复后的私聊和群聊流程都能稳定工作。',
       project: '平台能力',
       ownerUsername: 'liam.wang',
       teammates: ['admin'],
       dueDate: '2026-04-30',
       priority: 'high',
       status: 'review',
+      sharedCount: 1,
+      source: 'seed',
     },
     {
       id: 'workspace-copy',
       title: '润色中英文工作台文案',
-      summary: '检查界面文本在 English / 简体中文 两种语言下都足够清晰。',
+      summary: '检查界面文本在 English 和简体中文 下都足够清晰。',
       project: '体验升级',
       ownerUsername: 'sofia.zhao',
       teammates: ['emma.chen'],
       dueDate: '2026-05-01',
       priority: 'medium',
       status: 'planned',
+      sharedCount: 0,
+      source: 'seed',
     },
     {
       id: 'acceptance-script',
@@ -113,6 +120,8 @@ const taskCatalog: Record<Locale, WorkspaceTask[]> = {
       dueDate: '2026-04-30',
       priority: 'medium',
       status: 'done',
+      sharedCount: 3,
+      source: 'seed',
     },
   ],
 }
@@ -128,6 +137,8 @@ const scheduleCatalog: Record<Locale, ScheduleEvent[]> = {
       durationMinutes: 30,
       attendees: ['admin', 'emma.chen', 'liam.wang', 'sofia.zhao'],
       room: 'War Room A',
+      sharedCount: 1,
+      source: 'seed',
     },
     {
       id: 'design-review',
@@ -138,6 +149,8 @@ const scheduleCatalog: Record<Locale, ScheduleEvent[]> = {
       durationMinutes: 45,
       attendees: ['admin', 'sofia.zhao', 'emma.chen'],
       room: 'Design Bay',
+      sharedCount: 2,
+      source: 'seed',
     },
     {
       id: 'retro',
@@ -148,6 +161,8 @@ const scheduleCatalog: Record<Locale, ScheduleEvent[]> = {
       durationMinutes: 30,
       attendees: ['admin', 'emma.chen', 'liam.wang', 'sofia.zhao'],
       room: 'Focus Pod',
+      sharedCount: 0,
+      source: 'seed',
     },
   ],
   'zh-CN': [
@@ -160,6 +175,8 @@ const scheduleCatalog: Record<Locale, ScheduleEvent[]> = {
       durationMinutes: 30,
       attendees: ['admin', 'emma.chen', 'liam.wang', 'sofia.zhao'],
       room: 'A 作战室',
+      sharedCount: 1,
+      source: 'seed',
     },
     {
       id: 'design-review',
@@ -170,6 +187,8 @@ const scheduleCatalog: Record<Locale, ScheduleEvent[]> = {
       durationMinutes: 45,
       attendees: ['admin', 'sofia.zhao', 'emma.chen'],
       room: '设计区',
+      sharedCount: 2,
+      source: 'seed',
     },
     {
       id: 'retro',
@@ -180,6 +199,8 @@ const scheduleCatalog: Record<Locale, ScheduleEvent[]> = {
       durationMinutes: 30,
       attendees: ['admin', 'emma.chen', 'liam.wang', 'sofia.zhao'],
       room: '专注舱',
+      sharedCount: 0,
+      source: 'seed',
     },
   ],
 }
@@ -194,6 +215,8 @@ const documentCatalog: Record<Locale, SharedDocument[]> = {
       ownerUsername: 'emma.chen',
       updatedAt: '2026-04-28T08:20:00+08:00',
       status: 'ready',
+      sharedCount: 3,
+      source: 'seed',
     },
     {
       id: 'qa-brief',
@@ -203,6 +226,8 @@ const documentCatalog: Record<Locale, SharedDocument[]> = {
       ownerUsername: 'sofia.zhao',
       updatedAt: '2026-04-27T18:40:00+08:00',
       status: 'review',
+      sharedCount: 1,
+      source: 'seed',
     },
     {
       id: 'platform-notes',
@@ -212,6 +237,8 @@ const documentCatalog: Record<Locale, SharedDocument[]> = {
       ownerUsername: 'liam.wang',
       updatedAt: '2026-04-28T10:05:00+08:00',
       status: 'draft',
+      sharedCount: 0,
+      source: 'seed',
     },
   ],
   'zh-CN': [
@@ -223,6 +250,8 @@ const documentCatalog: Record<Locale, SharedDocument[]> = {
       ownerUsername: 'emma.chen',
       updatedAt: '2026-04-28T08:20:00+08:00',
       status: 'ready',
+      sharedCount: 3,
+      source: 'seed',
     },
     {
       id: 'qa-brief',
@@ -232,6 +261,8 @@ const documentCatalog: Record<Locale, SharedDocument[]> = {
       ownerUsername: 'sofia.zhao',
       updatedAt: '2026-04-27T18:40:00+08:00',
       status: 'review',
+      sharedCount: 1,
+      source: 'seed',
     },
     {
       id: 'platform-notes',
@@ -241,63 +272,10 @@ const documentCatalog: Record<Locale, SharedDocument[]> = {
       ownerUsername: 'liam.wang',
       updatedAt: '2026-04-28T10:05:00+08:00',
       status: 'draft',
+      sharedCount: 0,
+      source: 'seed',
     },
   ],
-}
-
-const teamMetaCatalog: Record<Locale, Record<string, TeamProfileMeta>> = {
-  en: {
-    admin: {
-      role: 'Workspace owner',
-      department: 'Program office',
-      location: 'Shanghai',
-      focus: 'Acceptance walkthrough and release confidence',
-    },
-    'emma.chen': {
-      role: 'Operations lead',
-      department: 'Operations',
-      location: 'Shanghai',
-      focus: 'Launch sequencing and stakeholder updates',
-    },
-    'liam.wang': {
-      role: 'Platform engineer',
-      department: 'Engineering',
-      location: 'Hangzhou',
-      focus: 'API stability and runtime verification',
-    },
-    'sofia.zhao': {
-      role: 'Product designer',
-      department: 'Design',
-      location: 'Shenzhen',
-      focus: 'Bilingual polish and visual QA',
-    },
-  },
-  'zh-CN': {
-    admin: {
-      role: '工作台负责人',
-      department: '项目办公室',
-      location: '上海',
-      focus: '验收演示与发布把关',
-    },
-    'emma.chen': {
-      role: '运营负责人',
-      department: '运营部',
-      location: '上海',
-      focus: '上线节奏与干系人同步',
-    },
-    'liam.wang': {
-      role: '平台工程师',
-      department: '工程部',
-      location: '杭州',
-      focus: 'API 稳定性与运行验证',
-    },
-    'sofia.zhao': {
-      role: '产品设计师',
-      department: '设计部',
-      location: '深圳',
-      focus: '双语细节与视觉验收',
-    },
-  },
 }
 
 export function buildSeedTasks(locale: Locale): WorkspaceTask[] {
@@ -314,15 +292,4 @@ export function buildDocuments(locale: Locale): SharedDocument[] {
 
 export function getSeededAccounts(locale: Locale): SeedAccount[] {
   return seededAccountsByLocale[locale]
-}
-
-export function getTeamProfileMeta(locale: Locale, username: string): TeamProfileMeta {
-  return (
-    teamMetaCatalog[locale][username] ?? {
-      role: locale === 'en' ? 'Team member' : '团队成员',
-      department: locale === 'en' ? 'General' : '通用',
-      location: locale === 'en' ? 'Remote' : '远程',
-      focus: locale === 'en' ? 'General collaboration' : '通用协作',
-    }
-  )
 }

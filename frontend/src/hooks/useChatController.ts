@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { workpalApi } from '../api/workpal'
-import { playMessageTone } from '../utils/notifications'
 import type { ChatMessage, Conversation, CreateConversationDraft } from '../types/chat'
+import type { ConversationFile } from '../types/workspace'
+import { copyText } from '../utils/clipboard'
+import { playMessageTone } from '../utils/notifications'
 import { useAuthStore, useConvStore, useWSStore } from './useAuthStore'
 import { usePreferencesStore } from './usePreferencesStore'
 
@@ -23,6 +25,12 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Unexpected request failure.'
 }
 
+function sortFiles(files: ConversationFile[]): ConversationFile[] {
+  return [...files].sort(
+    (left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+  )
+}
+
 export function useChatController() {
   const { username, userId, token } = useAuthStore()
   const { conversations, setConversations, activeConvID, setActiveConvID } = useConvStore()
@@ -35,6 +43,13 @@ export function useChatController() {
   const [searching, setSearching] = useState(false)
   const [searchActive, setSearchActive] = useState(false)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [groupFiles, setGroupFiles] = useState<ConversationFile[]>([])
+  const [groupFilesLoading, setGroupFilesLoading] = useState(false)
+  const [groupFileUploading, setGroupFileUploading] = useState(false)
+  const [announcementDraft, setAnnouncementDraft] = useState('')
+  const [announcementSaving, setAnnouncementSaving] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
@@ -58,43 +73,44 @@ export function useChatController() {
     return messages[activeConvID] ?? []
   }, [activeConvID, messages, searchActive, searchResults])
 
+  const replaceConversation = useCallback(
+    (updatedConversation: Conversation) => {
+      setConversations(
+        conversations.map((conversation) =>
+          conversation.id === updatedConversation.id ? updatedConversation : conversation,
+        ),
+      )
+    },
+    [conversations, setConversations],
+  )
+
   const loadMessages = useCallback(
     async (convID: number) => {
-      try {
-        const history = await workpalApi.getConversationMessages(convID)
-        setMessages(convID, history)
-      } catch (error) {
-        console.error(`Unable to load messages for conversation ${convID}.`, error)
-        throw error
-      }
+      const history = await workpalApi.getConversationMessages(convID)
+      setMessages(convID, history)
     },
     [setMessages],
   )
 
   const loadConversations = useCallback(async () => {
-    try {
-      const nextConversations = await workpalApi.listConversations()
-      setConversations(nextConversations)
+    const nextConversations = await workpalApi.listConversations()
+    setConversations(nextConversations)
 
-      if (nextConversations.length === 0) {
-        setActiveConvID(null)
-        return
-      }
+    if (nextConversations.length === 0) {
+      setActiveConvID(null)
+      return
+    }
 
-      const fallbackConversation =
-        nextConversations.find((conversation) => conversation.id === activeConvID) ?? nextConversations[0] ?? null
+    const fallbackConversation =
+      nextConversations.find((conversation) => conversation.id === activeConvID) ?? nextConversations[0] ?? null
 
-      if (!fallbackConversation) {
-        return
-      }
+    if (!fallbackConversation) {
+      return
+    }
 
-      setActiveConvID(fallbackConversation.id)
-      if (!messages[fallbackConversation.id]) {
-        await loadMessages(fallbackConversation.id)
-      }
-    } catch (error) {
-      console.error('Unable to load conversations.', error)
-      throw error
+    setActiveConvID(fallbackConversation.id)
+    if (!messages[fallbackConversation.id]) {
+      await loadMessages(fallbackConversation.id)
     }
   }, [activeConvID, loadMessages, messages, setActiveConvID, setConversations])
 
@@ -120,8 +136,8 @@ export function useChatController() {
         if (payload.from !== userId && soundEnabled) {
           playMessageTone()
         }
-      } catch (error) {
-        console.error('Unable to parse websocket message.', error)
+      } catch (socketError) {
+        console.error('Unable to parse websocket message.', socketError)
       }
     },
     [addMessage, soundEnabled, userId],
@@ -147,8 +163,8 @@ export function useChatController() {
 
     nextSocket.onmessage = handleSocketMessage
 
-    nextSocket.onerror = (error) => {
-      console.error('WebSocket error.', error)
+    nextSocket.onerror = (socketError) => {
+      console.error('WebSocket error.', socketError)
     }
 
     nextSocket.onclose = () => {
@@ -170,8 +186,8 @@ export function useChatController() {
       return
     }
 
-    void loadConversations().catch(() => {
-      // Error already logged in loadConversations.
+    void loadConversations().catch((loadError) => {
+      setError(getErrorMessage(loadError))
     })
     connectWebSocket()
 
@@ -193,18 +209,56 @@ export function useChatController() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [activeConvID, displayedMessages])
 
+  useEffect(() => {
+    if (!currentConversation || currentConversation.type !== 2) {
+      setAnnouncementDraft('')
+      setGroupFiles([])
+      setGroupFilesLoading(false)
+      return
+    }
+
+    setAnnouncementDraft(currentConversation.announcement ?? '')
+    let disposed = false
+
+    const loadGroupFiles = async () => {
+      setGroupFilesLoading(true)
+      try {
+        const files = await workpalApi.listConversationFiles(currentConversation.id)
+        if (!disposed) {
+          setGroupFiles(sortFiles(files))
+        }
+      } catch (loadError) {
+        if (!disposed) {
+          setError(getErrorMessage(loadError))
+        }
+      } finally {
+        if (!disposed) {
+          setGroupFilesLoading(false)
+        }
+      }
+    }
+
+    void loadGroupFiles()
+
+    return () => {
+      disposed = true
+    }
+  }, [currentConversation])
+
   const handleSelectConversation = useCallback(
     async (conversation: Conversation) => {
       setActiveConvID(conversation.id)
       setSearchQuery('')
       setSearchResults([])
       setSearchActive(false)
+      setError('')
+      setNotice('')
 
       if (!messages[conversation.id]) {
         try {
           await loadMessages(conversation.id)
-        } catch {
-          // Error already logged in loadMessages.
+        } catch (loadError) {
+          setError(getErrorMessage(loadError))
         }
       }
     },
@@ -221,8 +275,9 @@ export function useChatController() {
       const message = await workpalApi.sendMessage(activeConvID, trimmedInput)
       addMessage(activeConvID, message)
       setInput('')
-    } catch (error) {
-      console.error(`Unable to send message: ${getErrorMessage(error)}`, error)
+      setError('')
+    } catch (sendError) {
+      setError(getErrorMessage(sendError))
     }
   }, [activeConvID, addMessage, input])
 
@@ -239,10 +294,11 @@ export function useChatController() {
       const result = await workpalApi.searchMessages(trimmedQuery, activeConvID ?? undefined)
       setSearchResults(result.messages)
       setSearchActive(true)
-    } catch (error) {
+      setError('')
+    } catch (searchError) {
       setSearchResults([])
       setSearchActive(true)
-      console.error(`Unable to search messages: ${getErrorMessage(error)}`, error)
+      setError(getErrorMessage(searchError))
     } finally {
       setSearching(false)
     }
@@ -264,31 +320,105 @@ export function useChatController() {
       setSearchResults([])
       setSearchActive(false)
       setCreateDialogOpen(false)
+      setError('')
+      setNotice('')
     },
     [loadConversations, loadMessages, setActiveConvID],
   )
 
+  const handleSaveAnnouncement = useCallback(async () => {
+    if (!currentConversation || currentConversation.type !== 2) {
+      return
+    }
+
+    setAnnouncementSaving(true)
+    try {
+      const updated = await workpalApi.updateConversationAnnouncement(currentConversation.id, announcementDraft.trim())
+      replaceConversation(updated)
+      setNotice(updated.announcement || '')
+      setError('')
+    } catch (saveError) {
+      setError(getErrorMessage(saveError))
+    } finally {
+      setAnnouncementSaving(false)
+    }
+  }, [announcementDraft, currentConversation, replaceConversation])
+
+  const handleUploadGroupFile = useCallback(
+    async (file: File) => {
+      if (!currentConversation) {
+        return
+      }
+
+      setGroupFileUploading(true)
+      try {
+        const uploaded = await workpalApi.uploadConversationFile(currentConversation.id, file)
+        setGroupFiles((current) => sortFiles([uploaded, ...current]))
+        setNotice(uploaded.name)
+        setError('')
+      } catch (uploadError) {
+        setError(getErrorMessage(uploadError))
+      } finally {
+        setGroupFileUploading(false)
+      }
+    },
+    [currentConversation],
+  )
+
+  const handleDeleteGroupFile = useCallback(async (fileID: number) => {
+    try {
+      await workpalApi.deleteFile(fileID)
+      setGroupFiles((current) => current.filter((file) => file.id !== fileID))
+      setError('')
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError))
+    }
+  }, [])
+
+  const handleShareGroupFile = useCallback(async (fileID: number) => {
+    try {
+      const shareInfo = await workpalApi.shareFile(fileID)
+      const copied = await copyText(shareInfo.share_text)
+      setNotice(copied ? shareInfo.share_text : shareInfo.download_path)
+      setError('')
+    } catch (shareError) {
+      setError(getErrorMessage(shareError))
+    }
+  }, [])
+
   return {
     activeConvID,
+    announcementDraft,
+    announcementSaving,
     connected,
     conversations,
     createDialogOpen,
     currentConversation,
     displayedMessages,
+    error,
+    groupFileUploading,
+    groupFiles,
+    groupFilesLoading,
     input,
     messagesEndRef,
+    notice,
     searchActive,
     searchQuery,
     searching,
     userId,
     username,
+    closeCreateDialog: () => setCreateDialogOpen(false),
     handleClearSearch,
     handleCreateConversation,
+    handleDeleteGroupFile,
+    handleSaveAnnouncement,
     handleSearch,
     handleSelectConversation,
     handleSend,
+    handleShareGroupFile,
+    handleUploadGroupFile,
     openCreateDialog: () => setCreateDialogOpen(true),
-    closeCreateDialog: () => setCreateDialogOpen(false),
+    setAnnouncementDraft,
     setInput,
     setSearchQuery,
   }

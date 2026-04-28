@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
@@ -23,16 +24,13 @@ func NewConversationHandler(convSvc *service.ConversationService) *ConversationH
 	return &ConversationHandler{convSvc: convSvc}
 }
 
-// CreateConvReq 创建会话请求
 type CreateConvReq struct {
-	Type      int8    `json:"type"`       // 1=私聊 2=群聊，默认私聊
-	TargetUID int64   `json:"target_uid"` // 私聊目标用户ID
-	Name      string  `json:"name"`       // 群名（群聊时）
-	MemberIDs []int64 `json:"member_ids"` // 群聊成员ID列表
+	Type      int8    `json:"type"`
+	TargetUID int64   `json:"target_uid"`
+	Name      string  `json:"name"`
+	MemberIDs []int64 `json:"member_ids"`
 }
 
-// Create 创建会话
-// POST /api/v1/conversations
 func (h *ConversationHandler) Create(c *gin.Context) {
 	userID := c.GetInt64("userID")
 
@@ -42,7 +40,6 @@ func (h *ConversationHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// 私聊
 	if req.Type == model.ConversationTypePrivate || req.TargetUID > 0 {
 		conv, err := h.convSvc.CreatePrivateConv(c.Request.Context(), userID, req.TargetUID)
 		if err != nil {
@@ -53,7 +50,6 @@ func (h *ConversationHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// 群聊
 	if req.Type == model.ConversationTypeGroup {
 		conv, err := h.convSvc.CreateGroup(c.Request.Context(), req.Name, userID, req.MemberIDs)
 		if err != nil {
@@ -67,8 +63,6 @@ func (h *ConversationHandler) Create(c *gin.Context) {
 	response.FailWithMessage(c, http.StatusBadRequest, "无效的会话类型")
 }
 
-// List 获取会话列表
-// GET /api/v1/conversations
 func (h *ConversationHandler) List(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -83,17 +77,14 @@ func (h *ConversationHandler) List(c *gin.Context) {
 	response.SuccessPage(c, convs, total, page, pageSize)
 }
 
-// Get 获取会话详情
-// GET /api/v1/conversations/:id
 func (h *ConversationHandler) Get(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 
-	// 检查是否是成员
 	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
 	if err != nil {
 		handleServiceErr(c, err)
@@ -112,13 +103,11 @@ func (h *ConversationHandler) Get(c *gin.Context) {
 	response.Success(c, conv)
 }
 
-// Update 更新会话（群名）
-// PUT /api/v1/conversations/:id
 func (h *ConversationHandler) Update(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 
@@ -127,8 +116,6 @@ func (h *ConversationHandler) Update(c *gin.Context) {
 		handleServiceErr(c, err)
 		return
 	}
-
-	// 私聊不能改名，群聊只有群主能改
 	if conv.Type == model.ConversationTypePrivate {
 		response.FailWithMessage(c, http.StatusBadRequest, "私聊无法修改")
 		return
@@ -139,14 +126,23 @@ func (h *ConversationHandler) Update(c *gin.Context) {
 	}
 
 	var req struct {
-		Name string `json:"name"`
+		Name         *string `json:"name"`
+		Announcement *string `json:"announcement"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.FailWithMessage(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
-	conv.Name = req.Name
+	if req.Name != nil {
+		conv.Name = *req.Name
+	}
+	if req.Announcement != nil {
+		now := time.Now()
+		conv.Announcement = *req.Announcement
+		conv.AnnouncementUpdatedAt = &now
+	}
+
 	if err := h.convSvc.Update(c.Request.Context(), conv); err != nil {
 		handleServiceErr(c, err)
 		return
@@ -154,13 +150,35 @@ func (h *ConversationHandler) Update(c *gin.Context) {
 	response.Success(c, conv)
 }
 
-// Delete 解散会话
-// DELETE /api/v1/conversations/:id
+func (h *ConversationHandler) UpdateAnnouncement(c *gin.Context) {
+	userID := c.GetInt64("userID")
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
+		return
+	}
+
+	var req struct {
+		Announcement string `json:"announcement"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.FailWithMessage(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+
+	conv, err := h.convSvc.UpdateAnnouncement(c.Request.Context(), convID, userID, req.Announcement)
+	if err != nil {
+		handleServiceErr(c, err)
+		return
+	}
+	response.Success(c, conv)
+}
+
 func (h *ConversationHandler) Delete(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 
@@ -171,13 +189,11 @@ func (h *ConversationHandler) Delete(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// AddMember 添加成员
-// POST /api/v1/conversations/:id/members
 func (h *ConversationHandler) AddMember(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 
@@ -200,18 +216,16 @@ func (h *ConversationHandler) AddMember(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// RemoveMember 移除成员
-// DELETE /api/v1/conversations/:id/members/:uid
 func (h *ConversationHandler) RemoveMember(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 	targetUID, err := strconv.ParseInt(c.Param("uid"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的用户ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的用户 ID")
 		return
 	}
 
@@ -226,7 +240,6 @@ func (h *ConversationHandler) RemoveMember(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// RegisterRoutes 注册路由
 func (h *ConversationHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth := rg.Group("")
 	auth.Use(middleware.AuthRequired())
@@ -234,6 +247,7 @@ func (h *ConversationHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth.GET("/conversations", h.List)
 	auth.GET("/conversations/:id", h.Get)
 	auth.PUT("/conversations/:id", h.Update)
+	auth.PUT("/conversations/:id/announcement", h.UpdateAnnouncement)
 	auth.DELETE("/conversations/:id", h.Delete)
 	auth.POST("/conversations/:id/members", h.AddMember)
 	auth.DELETE("/conversations/:id/members/:uid", h.RemoveMember)
@@ -264,7 +278,6 @@ func handleServiceErr(c *gin.Context, err error) {
 	response.FailWithMessage(c, http.StatusInternalServerError, "内部错误: "+err.Error())
 }
 
-// WebSocketHandler WebSocket 处理
 type WebSocketHandler struct {
 	hub     *ws.Hub
 	convSvc *service.ConversationService
@@ -274,8 +287,6 @@ func NewWebSocketHandler(hub *ws.Hub, convSvc *service.ConversationService) *Web
 	return &WebSocketHandler{hub: hub, convSvc: convSvc}
 }
 
-// Handle WebSocket 升级处理
-// WSS /ws
 func (h *WebSocketHandler) Handle(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	if userID == 0 {
@@ -303,7 +314,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 	}
 	if hub == nil {
 		conn.Close()
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "WebSocket Hub 未初始化"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "WebSocket hub not ready"})
 		return
 	}
 	client := ws.NewClient(userID, conn, hub)
