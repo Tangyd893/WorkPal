@@ -2,6 +2,8 @@
 
 > 本文档对飞书、钉钉、企业微信等企业协作平台进行全方位技术拆解，并给出用 Go 语言构建仿品的技术架构设计方案。
 
+> 对齐说明：本文的竞品分析和“生产级目标架构”保留为设计参考；“当前 WorkPal 实现”以 Go 1.22 + Gin + PostgreSQL + Redis/Redis Streams + Bleve + MinIO/本地文件 + React/Vite 为准。Kafka、Elasticsearch、gRPC 微服务、云文档、WebRTC、MFA 等仍属于后续演进方向。
+
 ---
 
 ## 目录
@@ -60,19 +62,19 @@
 - **消息 ID**：使用雪花算法（Snowflake）生成全局唯一 ID，支持客户端本地去重
 - **消息漫游**：基于分页的漫游协议，消息云端持久化，本地只存最近 N 条
 
-#### 1.3.2 文档协作（OT 算法）
+#### 1.3.2 文档协作（CRDT / OT）
 
-飞书文档使用 **Operational Transformation (OT)** 算法实现多人实时编辑：
+生产级协作文档通常基于 **CRDT** 或 **Operational Transformation (OT)** 实现多人实时编辑。WorkPal 当前尚未实现云文档协作；后续落地时优先采用前端生态更成熟的 Yjs/CRDT，OT 保留为原理学习和备选方案：
 
 ```
 用户A编辑 → 本地预览 → 发送 Operation 到服务器
 用户B编辑 → 本地预览 → 发送 Operation 到服务器
-服务器收到所有 Operation → 转换（Transform）冲突 → 广播给所有用户
+服务器收到增量更新 → 合并冲突 → 广播给所有用户
 ```
 
 关键点：
-- 每次编辑不发送全量文本，只发送操作（insert/delete/retain）
-- 服务端维护文档的完整操作历史（Append-only log）
+- 每次编辑不发送全量文本，只发送增量更新或操作
+- 服务端维护文档版本、更新日志或快照
 - 支持离线编辑，重连后自动合并
 
 #### 1.3.3 全文搜索
@@ -152,11 +154,11 @@ Elasticsearch 集群
 |------|------|-------------|
 | **API Gateway** | 路由、鉴权、限流、日志 | Kong / APISIX / 自研（Gin） |
 | **User Service** | 用户注册/登录/组织架构/权限 | Gin + GORM |
-| **IM Service** | 消息收发、群聊管理、已读未读 | Gin + WebSocket + Kafka |
-| **Doc Service** | 云文档 CRUD、版本管理、权限 | Gin + OT 算法库 |
-| **File Service** | 文件上传/下载/预览/转码 | Gin + MinIO |
-| **Search Service** | 全文索引、搜索建议 | Gin + Elasticsearch |
-| **Notify Service** | 推送（APNs/FCM/厂商通道） | Worker + Kafka Consumer |
+| **IM Service** | 消息收发、群聊管理、已读未读 | 当前：Gin + WebSocket + Redis Streams 抽象 |
+| **Doc Service** | 云文档 CRUD、版本管理、权限 | 规划：Yjs/CRDT 或 OT |
+| **File Service** | 文件上传/下载/预览/转码 | 当前：Gin + MinIO/本地文件 |
+| **Search Service** | 全文索引、搜索建议 | 当前：Gin + Bleve |
+| **Notify Service** | 推送（APNs/FCM/厂商通道） | 规划：Worker + 消息队列 |
 | **Calendar Service** | 日程、会议、邀请 | Gin + GORM |
 
 ### 3.3 关键架构决策
@@ -164,24 +166,26 @@ Elasticsearch 集群
 #### 3.3.1 消息可靠投递（AT LEAST ONCE）
 
 ```
-Producer → Kafka → Consumer → ACK
+Producer → Redis Streams/Kafka → Consumer → ACK
              ↑
          消息持久化（未 ACK 不删除）
 ```
 
-- 生产者：发送消息到 Kafka，等待 ISR 副本确认
+- 当前实现：提供 Redis Streams 消息队列抽象；HTTP 发送消息先落 PostgreSQL，再通过 WebSocket 广播
+- 生产级扩展：发送消息到 Kafka，等待 ISR 副本确认
 - 消费者：处理完消息后手动 ACK，防止丢消息
 - 补偿机制：消费者幂等处理，消息去重
 
 #### 3.3.2 WebSocket 长连接管理
 
 ```
-Client → Nginx/LB → WebSocket Gateway → Redis (Session) → Kafka/Redis PubSub
+Client → Gin /ws?token=... → WebSocket Hub → PostgreSQL/Redis
 ```
 
-- **连接数**：单机 WebSocket Gateway 可维护 10W+ 长连接（基于 epoll/kqueue）
-- **消息路由**：Redis PubSub 广播，Gateway 节点间通过 Redis 同步
-- **心跳检测**：客户端每 30s 发心跳，服务端标记在线状态到 Redis
+- **当前连接模型**：单进程 Hub 管理连接，登录后加入当前用户已有会话房间
+- **当前消息路由**：聊天消息通过 HTTP API 持久化后，按会话成员通过 WebSocket 推送
+- **心跳检测**：服务端定时 Ping；在线状态服务使用 Redis 维护
+- **后续扩展**：多节点部署时再引入 Redis PubSub / Streams / Kafka 做跨节点广播
 
 #### 3.3.3 水平扩展策略
 
@@ -206,10 +210,10 @@ Client → Nginx/LB → WebSocket Gateway → Redis (Session) → Kafka/Redis Pu
 
 | 组件 | 推荐选型 | 原因 |
 |------|----------|------|
-| **语言/框架** | Go 1.21+ / Gin / Echo / Fiber | 高并发、简洁、部署简单 |
+| **语言/框架** | Go 1.22+ / Gin / Echo / Fiber | 高并发、简洁、部署简单 |
 | **数据库** | PostgreSQL 16 | 事务强一致、JSON 支持、PostGIS |
 | **缓存** | Redis 7 | String/Hash/List/SortedSet 多种数据结构 |
-| **消息队列** | Kafka 或 NATS | Kafka 生态完善，NATS 更轻量 |
+| **消息队列** | Redis Streams / Kafka / NATS | 当前用 Redis Streams，Kafka/NATS 属于后续扩展 |
 | **WebSocket** | gorilla/websocket / melean/rwebsocket | 稳定、广泛使用 |
 | **ORM** | GORM / sqlx | GORM 便捷，sqlx 性能更好 |
 | **配置** | Viper | 支持 YAML/TOML/ENV/命令行 |
@@ -221,8 +225,8 @@ Client → Nginx/LB → WebSocket Gateway → Redis (Session) → Kafka/Redis Pu
 
 | 组件 | 推荐选型 | 适用场景 |
 |------|----------|----------|
-| **全文搜索** | Elasticsearch / Bleve | 消息/文档搜索 |
-| **文件存储** | MinIO / 阿里云 OSS | 私有部署 / 云部署 |
+| **全文搜索** | Bleve / Elasticsearch | 当前用 Bleve，重型搜索再升级 Elasticsearch |
+| **文件存储** | MinIO / 本地文件 / 阿里云 OSS | 当前支持 MinIO + 本地文件双模式 |
 | **服务通信** | gRPC + Protobuf | 内部微服务间调用 |
 | **API 网关** | Kong / APISIX | 路由/鉴权/限流/插件化 |
 | **链路追踪** | Jaeger / Zipkin | 分布式追踪 |
@@ -240,112 +244,51 @@ Client → Nginx/LB → WebSocket Gateway → Redis (Session) → Kafka/Redis Pu
 | **Redis 管理** | RedisInsight |
 | **Docker 管理** | Portainer |
 | **代码规范** | golangci-lint + pre-commit |
-| **CI/CD** | GitHub Actions / GitLab CI |
+| **CI** | 当前：GitHub Actions；后续如需 CD 再接入镜像发布和部署 |
 | **代码生成** | `go generate` + stringer + mockgen |
 
 ---
 
 ## 5. 项目结构设计
 
-### 5.1 推荐目录结构（DDD + 洋葱架构）
+### 5.1 当前目录结构（按实际仓库对齐）
 
 ```
-feishu-clone/
-├── cmd/                          # 入口点
-│   └── server/
-│       └── main.go               # 主程序入口
-│   └── migrator/
-│       └── main.go               # 数据库迁移工具
+WorkPal/
+├── backend/
+│   ├── cmd/server/main.go        # 后端入口
+│   ├── configs/
+│   │   ├── config.go             # 配置加载
+│   │   └── config.example.yaml   # 样例配置，真实 config.yaml 不提交
 │
-├── internal/                     # 私有应用代码（不可被外部 import）
-│   ├── user/                     # 用户模块（DDD 风格）
-│   │   ├── handler/              # HTTP Handler / gRPC Server
-│   │   │   ├── user.go
-│   │   │   └── auth.go
-│   │   ├── service/              # 业务逻辑层
-│   │   │   ├── user_svc.go
-│   │   │   └── auth_svc.go
-│   │   ├── repo/                 # 数据访问层
-│   │   │   └── user_repo.go
-│   │   ├── model/                 # 数据模型（DO / Entity）
-│   │   │   └── user.go
-│   │   └── pkg/                  # 模块内部工具包
+│   ├── internal/                 # 私有应用代码
+│   │   ├── user/                 # 用户模块
+│   │   │   ├── handler/          # HTTP Handler
+│   │   │   ├── service/          # 业务逻辑层
+│   │   │   ├── repo/             # 数据访问层
+│   │   │   └── model/            # 数据模型
 │   │
-│   ├── im/                       # IM 即时通讯模块
-│   │   ├── handler/
-│   │   │   ├── message.go        # 消息 CRUD
-│   │   │   ├── conversation.go   # 会话管理
-│   │   │   └── ws.go             # WebSocket Handler
-│   │   ├── service/
-│   │   │   ├── message_svc.go
-│   │   │   └── presence_svc.go    # 在线状态
-│   │   ├── repo/
-│   │   │   ├── message_repo.go
-│   │   │   └── conversation_repo.go
-│   │   ├── model/
-│   │   │   ├── message.go
-│   │   │   └── conversation.go
-│   │   └── ws/
-│   │       ├── hub.go            # WebSocket Hub（连接管理器）
-│   │       ├── client.go         # 单个连接客户端
-│   │       └── broadcast.go      # 广播逻辑
+│   │   ├── im/                   # 会话、消息、WebSocket
+│   │   │   ├── handler/
+│   │   │   ├── service/
+│   │   │   ├── repo/
+│   │   │   ├── model/
+│   │   │   └── ws/               # hub/client/protocol
+│   │   │
+│   │   ├── file/                 # 文件上传、下载、会话文件
+│   │   ├── search/               # Bleve 消息搜索
+│   │   └── common/               # errors/middleware/response/pagination
 │   │
-│   ├── org/                      # 组织架构模块
-│   │   ├── handler/
-│   │   ├── service/
-│   │   ├── repo/
-│   │   └── model/
-│   │
-│   ├── file/                     # 文件存储模块
-│   │   ├── handler/
-│   │   ├── service/
-│   │   ├── repo/
-│   │   └── model/
-│   │
-│   └── common/                   # 公共代码（可被 internal 所有模块 import）
-│       ├── middleware/           # 中间件（JWT 鉴权/日志/限流/CORS）
-│       ├── response/              # 统一响应结构
-│       ├── errors/               # 自定义错误类型
-│       ├── pagination/           # 分页工具
-│       └── validator/            # 参数校验
+│   ├── pkg/
+│   │   ├── auth/                 # JWT
+│   │   ├── cache/                # Redis
+│   │   └── msgqueue/             # Redis Streams
+│   ├── Makefile
+│   └── go.mod
 │
-├── pkg/                          # 公共工具包（可被外部项目 import）
-│   ├── auth/                     # JWT / 密码加密工具
-│   ├── cache/                    # Redis 封装
-│   ├── msgqueue/                 # Kafka/NATS 封装
-│   ├── oss/                      # 对象存储封装
-│   └── tracer/                   # 链路追踪封装
-│
-├── configs/                      # 配置文件
-│   ├── config.yaml
-│   ├── config.prod.yaml
-│   └── config.test.yaml
-│
-├── deployments/                  # 部署配置
-│   ├── docker/
-│   │   ├── Dockerfile
-│   │   └── docker-compose.yaml
-│   └── k8s/
-│       ├── deployment.yaml
-│       └── service.yaml
-│
-├── migrations/                   # 数据库迁移（sqlc / goose）
-│   ├── 001_create_users.sql
-│   ├── 002_create_conversations.sql
-│   └── 003_create_messages.sql
-│
-├── proto/                        # Protobuf 定义（gRPC 接口）
-│   ├── user.proto
-│   ├── im.proto
-│   └── generate.sh
-│
-├── scripts/                      # 工具脚本
-│   ├── gen_token.go              # 生成测试 JWT
-│   └── mock_data.go              # 构造测试数据
-│
-├── Makefile                      # make 命令集合
-├── go.mod
-├── go.sum
+├── frontend/                     # React 18 + Vite + TypeScript
+├── docker/docker-compose.yaml    # PostgreSQL + Redis + MinIO
+├── docs/
 └── README.md
 ```
 
@@ -433,19 +376,21 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 ```go
 // WebSocket Hub 设计（核心）
 type Hub struct {
-    clients    map[*Client]bool      // 所有连接
-    rooms      map[string]map[*Client]bool  // 房间（群）-> 客户端
+    clients    map[int64]*Client
+    rooms      map[int64]map[*Client]bool
     register   chan *Client
     unregister chan *Client
-    broadcast  chan *Message
+    broadcast  chan *BroadcastMsg
     mu         sync.RWMutex
+    roomMu     sync.RWMutex
 }
 
 // 客户端消息格式（JSON）
 type WSMessage struct {
     Type    string      `json:"type"`    // "chat"/"presence"/"ack"
-    From    string      `json:"from"`
-    To      string      `json:"to"`       // user_id 或 room_id
+    ID      int64       `json:"id,omitempty"`
+    From    int64       `json:"from"`
+    ConvID  int64       `json:"conv_id"`
     Content interface{} `json:"content"`
     Seq     int64       `json:"seq"`      // 客户端本地序列号
 }
@@ -457,11 +402,14 @@ type WSMessage struct {
 # 使用 wscat 测试
 wscat -c ws://localhost:8080/ws?token=xxx
 
-# 发送消息
-{"type":"chat","to":"user_id","content":"hello"}
+# 当前实现中，聊天消息通过 HTTP API 持久化：
+curl -X POST http://localhost:8080/api/v1/conversations/1/messages \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"type":1,"content":"hello"}'
 
-# 收到服务器推送
-{"type":"chat","from":"user_id","content":"hello","seq":1}
+# 然后 WebSocket 收到服务器广播
+{"type":"chat","id":123,"from":1,"conv_id":1,"content":"hello"}
 ```
 
 ---
@@ -471,14 +419,12 @@ wscat -c ws://localhost:8080/ws?token=xxx
 **目标**：引入消息队列、分库分表、搜索等生产级组件
 
 ```
-✅  Kafka 消息总线（消息异步处理、削峰）
+✅  Redis Streams 消息队列抽象（消息异步处理、削峰基础）
 ✅  消息多级缓存（Redis L1 + DB L2）
-✅  Elasticsearch 聊天记录全文搜索
-✅  MinIO 文件上传/预览（图片/文档）
-✅  gRPC 微服务拆分（User/IM/File 服务独立部署）
-✅  API 网关（鉴权/路由/限流）
-✅  Prometheus 指标暴露 + Grafana 看板
-✅  Jaeger 分布式链路追踪
+✅  Bleve 聊天记录全文搜索
+✅  MinIO/本地文件上传下载
+✅  Prometheus 指标暴露
+✅  GitHub Actions CI（Go build/lint/test + 前端类型检查/Vitest）
 ✅  Docker Compose 一键部署
 ```
 
@@ -487,14 +433,14 @@ wscat -c ws://localhost:8080/ws?token=xxx
 ### 第四阶段：高级特性（Week 9-12）—— 向飞书看齐
 
 ```
-✅  云文档协作编辑（OT 算法）
-✅  音视频通话（WebRTC SFU）
-✅  表情回复/线程消息
-✅  消息转发/引用/合并转发
-✅  消息免打扰/置顶/折叠
-✅  多因素认证（MFA）
-✅  开放平台（机器人/Webhook/小程序）
-✅  国际化（i18n）
+📋  云文档协作编辑（Yjs/CRDT 优先，OT 可作为学习路线）
+📋  音视频通话（WebRTC）
+📋  表情回复/线程消息
+📋  消息转发/引用/合并转发
+📋  消息免打扰/置顶/折叠
+📋  多因素认证（MFA）
+📋  开放平台（机器人/Webhook/小程序）
+📋  国际化（i18n）
 ```
 
 ---
@@ -506,16 +452,18 @@ wscat -c ws://localhost:8080/ws?token=xxx
 ```sql
 -- 用户表
 CREATE TABLE users (
-    id            BIGINT PRIMARY KEY DEFAULT nextval('users_id_seq'),
+    id            BIGSERIAL PRIMARY KEY,
     username      VARCHAR(64) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     nickname      VARCHAR(128),
     avatar_url    VARCHAR(512),
     email         VARCHAR(255) UNIQUE,
-    phone         VARCHAR(32) UNIQUE,
+    phone         VARCHAR(32),
     status        SMALLINT DEFAULT 1,  -- 1正常 2禁用
+    department_id BIGINT DEFAULT 0,
     created_at    TIMESTAMP DEFAULT NOW(),
-    updated_at    TIMESTAMP DEFAULT NOW()
+    updated_at    TIMESTAMP DEFAULT NOW(),
+    deleted_at    TIMESTAMP
 );
 
 -- 组织表（部门）
@@ -523,41 +471,36 @@ CREATE TABLE departments (
     id         BIGINT PRIMARY KEY,
     name       VARCHAR(128) NOT NULL,
     parent_id  BIGINT REFERENCES departments(id),  -- 树形自关联
-    leader_id  BIGINT REFERENCES users(id),
+    leader_id  BIGINT DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW()
-);
-
--- 用户部门关联表
-CREATE TABLE user_departments (
-    user_id      BIGINT REFERENCES users(id),
-    dept_id      BIGINT REFERENCES departments(id),
-    PRIMARY KEY (user_id, dept_id)
 );
 
 -- 会话表（Conversation）
 CREATE TABLE conversations (
-    id          BIGINT PRIMARY KEY,
+    id          BIGSERIAL PRIMARY KEY,
     type        SMALLINT NOT NULL,      -- 1=私聊 2=群聊
     name        VARCHAR(256),            -- 群名（私聊为空）
     avatar_url  VARCHAR(512),
     owner_id    BIGINT,                  -- 群主（私聊为空）
     created_at  TIMESTAMP DEFAULT NOW(),
-    updated_at  TIMESTAMP DEFAULT NOW()
+    updated_at  TIMESTAMP DEFAULT NOW(),
+    deleted_at  TIMESTAMP
 );
 
 -- 会话成员表
 CREATE TABLE conversation_members (
-    conv_id   BIGINT REFERENCES conversations(id),
-    user_id   BIGINT REFERENCES users(id),
+    id        BIGSERIAL PRIMARY KEY,
+    conv_id   BIGINT NOT NULL,
+    user_id   BIGINT NOT NULL,
     joined_at  TIMESTAMP DEFAULT NOW(),
-    PRIMARY KEY (conv_id, user_id)
+    UNIQUE (conv_id, user_id)
 );
 
 -- 消息表
 CREATE TABLE messages (
-    id            BIGINT PRIMARY KEY,  -- 雪花算法 ID
-    conv_id       BIGINT REFERENCES conversations(id),
-    sender_id     BIGINT REFERENCES users(id),
+    id            BIGSERIAL PRIMARY KEY,
+    conv_id       BIGINT NOT NULL,
+    sender_id     BIGINT NOT NULL,
     type          SMALLINT NOT NULL,   -- 1=文字 2=图片 3=文件 4=代码 5=卡片
     content       TEXT,
     metadata      JSONB,               -- 扩展字段（图片宽高、文件大小等）
@@ -578,11 +521,17 @@ CREATE TABLE message_reads (
     PRIMARY KEY (user_id, conv_id)
 );
 
--- 用户在线状态（Redis 更适合，此处仅作记录）
-CREATE TABLE user_presences (
-    user_id    BIGINT PRIMARY KEY REFERENCES users(id),
-    status     SMALLINT DEFAULT 0,   -- 0=离线 1=在线 2=忙碌
-    last_seen  TIMESTAMP DEFAULT NOW()
+-- 文件表
+CREATE TABLE files (
+    id           BIGSERIAL PRIMARY KEY,
+    user_id      BIGINT NOT NULL,
+    conv_id      BIGINT DEFAULT 0,
+    name         VARCHAR(256) NOT NULL,
+    key          VARCHAR(512) NOT NULL,
+    size         BIGINT NOT NULL,
+    content_type VARCHAR(128),
+    mime_type    VARCHAR(128),
+    created_at   TIMESTAMP DEFAULT NOW()
 );
 ```
 
@@ -610,15 +559,12 @@ CREATE TABLE user_presences (
 认证：
 POST   /api/v1/auth/register         注册
 POST   /api/v1/auth/login            登录
-POST   /api/v1/auth/refresh           刷新 Token
-POST   /api/v1/auth/logout             登出
 
 用户：
 GET    /api/v1/users/me              当前用户信息
 PUT    /api/v1/users/me               更新个人资料
-GET    /api/v1/users/:id              获取用户信息
+GET    /api/v1/users                  用户列表（分页）
 GET    /api/v1/users/search           搜索用户
-GET    /api/v1/departments/tree       获取组织架构树
 
 会话：
 GET    /api/v1/conversations          获取会话列表
@@ -635,10 +581,16 @@ POST   /api/v1/conversations/:id/messages  发送消息
 PUT    /api/v1/messages/:id           编辑消息
 DELETE /api/v1/messages/:id           撤回消息
 POST   /api/v1/messages/:id/read      标记已读
+POST   /api/v1/conversations/:id/read-all  会话全部已读
 
 文件：
 POST   /api/v1/files/upload           上传文件
+GET    /api/v1/files                  当前用户文件列表
 GET    /api/v1/files/:id               下载文件
+GET    /api/v1/conversations/:id/files 会话文件列表
+
+搜索：
+GET    /api/v1/search/messages?q=     搜索当前用户可见消息
 
 WebSocket：
 WSS   /ws?token=xxx                  WebSocket 长连接
@@ -703,22 +655,29 @@ WSS   /ws?token=xxx                  WebSocket 长连接
 
 ```bash
 # 克隆项目后
-make deps          # 安装依赖
-make migrate      # 运行数据库迁移
-make run          # 启动服务
-make test         # 运行测试
-make docker       # 构建 Docker 镜像
+cd backend
+cp configs/config.example.yaml configs/config.yaml
+make deps          # 安装 Go 依赖
+make docker-up     # 启动 PostgreSQL / Redis / MinIO
+make run           # 启动后端服务
+make test          # 运行后端测试
 
 # 或一键启动（需要 Docker）
-docker compose -f deployments/docker/docker-compose.yaml up -d
+docker compose -f docker/docker-compose.yaml up -d
+
+# 前端
+cd ../frontend
+npm ci
+npm run dev
 ```
 
 ### C. 开发环境要求
 
 ```
-Go 1.21+
+Go 1.22+
 PostgreSQL 16+
 Redis 7+
-Kafka 3.x (第三阶段)
+MinIO（可选，本地文件模式可不启用）
 Docker & Docker Compose
+Node.js 18+
 ```
