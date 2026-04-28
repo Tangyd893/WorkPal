@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	presenceOnlineKey   = "presence:online"
-	presenceUserKeyFmt  = "presence:user:%d"
-	presenceTimeoutSec  = 60 // 60秒无心跳视为离线
+	presenceOnlineKey  = "presence:online"
+	presenceUserKeyFmt = "presence:user:%d"
+	presenceTimeoutSec = 60 // 60秒无心跳视为离线
 )
 
 type PresenceService struct {

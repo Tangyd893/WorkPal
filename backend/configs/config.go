@@ -34,10 +34,10 @@ type DatabaseConfig struct {
 }
 
 type RedisConfig struct {
-	Host      string
-	Port      int
-	Password  string
-	DB        int
+	Host       string
+	Port       int
+	Password   string
+	DB         int
 	StreamsKey string
 }
 
@@ -61,8 +61,8 @@ type MinIOConfig struct {
 }
 
 type SearchConfig struct {
-	Engine      string
-	Bleve       BleveConfig
+	Engine        string
+	Bleve         BleveConfig
 	Elasticsearch ElasticsearchConfig
 }
 
@@ -86,6 +86,16 @@ type WSConfig struct {
 func Load(configPath string) (*Config, error) {
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("yaml")
+	viper.SetDefault("server.port", 8080)
+	viper.SetDefault("server.mode", "debug")
+	viper.SetDefault("server.jwtExpiryHours", 72)
+	viper.SetDefault("database.maxOpenConns", 25)
+	viper.SetDefault("database.maxIdleConns", 5)
+	viper.SetDefault("redis.streamsKey", "workpal:streams:messages")
+	viper.SetDefault("file.storeType", "local")
+	viper.SetDefault("file.localBaseDir", "./uploads")
+	viper.SetDefault("file.maxFileSizeMB", 50)
+	viper.SetDefault("search.bleve.indexPath", "./data/search")
 
 	// 支持环境变量覆盖
 	viper.AutomaticEnv()

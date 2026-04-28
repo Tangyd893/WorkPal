@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"gorm.io/gorm"
 )
 

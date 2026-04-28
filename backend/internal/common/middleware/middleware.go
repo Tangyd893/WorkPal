@@ -21,14 +21,14 @@ func AuthRequired() gin.HandlerFunc {
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			response.FailWithMessage(c, 40101, "Authorization 格式错误，应为: Bearer <token>")
+			response.FailWithStatus(c, 401, 40101, "Authorization 格式错误，应为: Bearer <token>")
 			c.Abort()
 			return
 		}
 
 		claims, err := auth.ParseToken(parts[1])
 		if err != nil {
-			response.FailWithMessage(c, 40102, "Token 无效或已过期")
+			response.FailWithStatus(c, 401, 40102, "Token 无效或已过期")
 			c.Abort()
 			return
 		}

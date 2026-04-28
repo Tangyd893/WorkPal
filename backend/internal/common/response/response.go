@@ -47,7 +47,19 @@ func Fail(c *gin.Context, err *apperrors.AppError) {
 }
 
 func FailWithMessage(c *gin.Context, code int, msg string) {
-	c.JSON(http.StatusOK, Response{
+	status := http.StatusOK
+	if code >= 100 && code <= 599 {
+		status = code
+	}
+	c.JSON(status, Response{
+		Code:    code,
+		Message: msg,
+		Data:    nil,
+	})
+}
+
+func FailWithStatus(c *gin.Context, status int, code int, msg string) {
+	c.JSON(status, Response{
 		Code:    code,
 		Message: msg,
 		Data:    nil,

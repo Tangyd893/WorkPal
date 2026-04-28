@@ -6,16 +6,16 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	config "github.com/Tangyd893/WorkPal/backend/configs"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	fileHandler "github.com/Tangyd893/WorkPal/backend/internal/file/handler"
-	fileSvc "github.com/Tangyd893/WorkPal/backend/internal/file/service"
-	fileRepo "github.com/Tangyd893/WorkPal/backend/internal/file/repo"
 	fileModel "github.com/Tangyd893/WorkPal/backend/internal/file/model"
+	fileRepo "github.com/Tangyd893/WorkPal/backend/internal/file/repo"
+	fileSvc "github.com/Tangyd893/WorkPal/backend/internal/file/service"
 	imHandler "github.com/Tangyd893/WorkPal/backend/internal/im/handler"
 	imModel "github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/repo"
@@ -24,9 +24,9 @@ import (
 	searchHandler "github.com/Tangyd893/WorkPal/backend/internal/search/handler"
 	searchSvc "github.com/Tangyd893/WorkPal/backend/internal/search/service"
 	userHandler "github.com/Tangyd893/WorkPal/backend/internal/user/handler"
+	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	userRepo "github.com/Tangyd893/WorkPal/backend/internal/user/repo"
 	userService "github.com/Tangyd893/WorkPal/backend/internal/user/service"
-	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	"github.com/Tangyd893/WorkPal/backend/pkg/auth"
 	"github.com/Tangyd893/WorkPal/backend/pkg/cache"
 	"github.com/Tangyd893/WorkPal/backend/pkg/msgqueue"
@@ -77,21 +77,13 @@ func init() {
 
 func main() {
 	// 1. 加载配置
-	configPath := os.Getenv("CONFIG_PATH")
-	if configPath == "" {
-		// Use absolute path relative to the server binary location
-		execPath, err := os.Executable()
-		if err == nil {
-			baseDir := filepath.Dir(execPath)
-			configPath = filepath.Join(baseDir, "configs", "config.yaml")
-		} else {
-			configPath = "configs/config.yaml"
-		}
-	}
-
+	configPath := resolveConfigPath()
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("加载配置失败: %v", err)
+	}
+	if cfg.Server.JWTSecret == "" {
+		log.Fatal("加载配置失败: server.jwtSecret 不能为空")
 	}
 
 	// 设置 JWT 密钥
@@ -192,7 +184,7 @@ func main() {
 		log.Println("✓ 文件存储初始化完成（本地模式）")
 	}
 	fileService := fileSvc.NewFileService(fRepo, fStore, cfg.File.MaxFileSizeMB)
-	fHdlr := fileHandler.NewFileHandler(fileService)
+	fHdlr := fileHandler.NewFileHandler(fileService, convSvc)
 
 	// Search 模块
 	var searchHdlr *searchHandler.SearchHandler
@@ -272,7 +264,7 @@ func main() {
 	}
 
 	// WebSocket 端点
-	wsHandler := imHandler.NewWebSocketHandler(hub)
+	wsHandler := imHandler.NewWebSocketHandler(hub, convSvc)
 	r.GET("/ws", func(c *gin.Context) {
 		var tokenStr string
 		// 优先从 query token 读（WebSocket 无法自定义 header）
@@ -295,7 +287,6 @@ func main() {
 		c.Set("userID", claims.UserID)
 		wsHandler.Handle(c)
 	})
-
 
 	// 10. 启动服务器
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
@@ -346,4 +337,23 @@ func autoMigrate(db *gorm.DB) error {
 		&imModel.MessageRead{},
 		&fileModel.File{},
 	)
+}
+
+func resolveConfigPath() string {
+	if configPath := os.Getenv("CONFIG_PATH"); configPath != "" {
+		return configPath
+	}
+
+	candidates := []string{
+		filepath.Join("configs", "config.yaml"),
+		filepath.Join("configs", "config.example.yaml"),
+		filepath.Join("backend", "configs", "config.yaml"),
+		filepath.Join("backend", "configs", "config.example.yaml"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return filepath.Join("configs", "config.yaml")
 }

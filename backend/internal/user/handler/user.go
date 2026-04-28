@@ -4,11 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/user/service"
-	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
-	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/pagination"
+	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
+	"github.com/Tangyd893/WorkPal/backend/internal/user/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,11 +58,11 @@ func (h *UserHandler) Login(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{
-		"token":       resp.Token,
-		"expires_at":  resp.ExpiresAt,
-		"user_id":     resp.User.ID,
-		"username":    resp.User.Username,
-		"nickname":    resp.User.Nickname,
+		"token":      resp.Token,
+		"expires_at": resp.ExpiresAt,
+		"user_id":    resp.User.ID,
+		"username":   resp.User.Username,
+		"nickname":   resp.User.Nickname,
 	})
 }
 
@@ -112,6 +112,22 @@ func (h *UserHandler) ListUsers(c *gin.Context) {
 	response.SuccessPage(c, users, total, page, pageSize)
 }
 
+// SearchUsers 模糊搜索用户
+// GET /api/v1/users/search?q=keyword
+func (h *UserHandler) SearchUsers(c *gin.Context) {
+	keyword := c.Query("q")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	page, pageSize = pagination.GetParams(page, pageSize)
+
+	users, total, err := h.userSvc.Search(c.Request.Context(), keyword, page, pageSize)
+	if err != nil {
+		handleServiceErr(c, err)
+		return
+	}
+	response.SuccessPage(c, users, total, page, pageSize)
+}
+
 // RegisterRoutes 注册用户相关路由
 func (h *UserHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	// 公开路由（无需认证）
@@ -124,6 +140,7 @@ func (h *UserHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth.GET("/users/me", h.GetMe)
 	auth.PUT("/users/me", h.UpdateMe)
 	auth.GET("/users", h.ListUsers)
+	auth.GET("/users/search", h.SearchUsers)
 }
 
 // handleServiceErr 将 service 层错误转换为 HTTP 响应

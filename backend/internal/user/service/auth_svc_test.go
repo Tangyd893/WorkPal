@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	"github.com/Tangyd893/WorkPal/backend/pkg/auth"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/bcrypt"
@@ -13,9 +13,9 @@ import (
 
 // mockUserRepo implements a simple in-memory user repo for testing
 type mockUserRepo struct {
-	users    map[string]*model.User // key: username
-	byID     map[int64]*model.User // key: userID
-	nextID   int64
+	users     map[string]*model.User // key: username
+	byID      map[int64]*model.User  // key: userID
+	nextID    int64
 	createErr error
 }
 
@@ -65,7 +65,7 @@ func (m *mockUserRepo) Update(ctx context.Context, user *model.User) error {
 }
 
 var errUserAlreadyExists = apperrors.ErrUserAlreadyExists
-var errUserNotFound  = apperrors.ErrUserNotFound
+var errUserNotFound = apperrors.ErrUserNotFound
 
 func TestRegister(t *testing.T) {
 	auth.SetSecret("test-secret-for-unit-test")

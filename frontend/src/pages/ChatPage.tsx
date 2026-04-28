@@ -6,6 +6,7 @@ import request, { searchMessages } from '../api/request'
 // WebSocket 消息格式
 interface WSMessage {
   type: string
+  id?: number
   from?: number
   to?: string
   conv_id?: number
@@ -33,6 +34,8 @@ export default function ChatPage() {
   const [searching, setSearching] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimerRef = useRef<number | null>(null)
+  const closingRef = useRef(false)
 
   const handleLogout = () => {
     logout()
@@ -43,7 +46,7 @@ export default function ChatPage() {
   const loadConversations = async () => {
     try {
       const res = await request.get<any, any>('/conversations')
-      setConversations(Array.isArray(res) ? res : (res.items || []))
+      setConversations(Array.isArray(res) ? res : (res?.items || []))
     } catch (err) {
       console.error('加载会话列表失败', err)
     }
@@ -52,9 +55,11 @@ export default function ChatPage() {
   // 连接 WebSocket
   const connectWS = () => {
     if (!token) return
+    if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return
+    closingRef.current = false
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
-    const ws = new WebSocket(`${protocol}//${host}/ws?token=${token}`)
+    const ws = new WebSocket(`${protocol}//${host}/ws?token=${encodeURIComponent(token)}`)
 
     ws.onopen = () => {
       console.log('[WS] 已连接')
@@ -66,7 +71,7 @@ export default function ChatPage() {
         const msg: WSMessage = JSON.parse(event.data)
         if (msg.type === 'chat' && msg.conv_id) {
           const chatMsg: ChatMessage = {
-            id: Date.now(),
+            id: msg.id || Date.now(),
             conv_id: msg.conv_id!,
             sender_id: msg.from!,
             type: 1,
@@ -83,8 +88,10 @@ export default function ChatPage() {
     ws.onclose = () => {
       console.log('[WS] 已断开')
       setConnected(false)
-      // 30秒后重连
-      setTimeout(connectWS, 30000)
+      wsRef.current = null
+      if (!closingRef.current) {
+        reconnectTimerRef.current = window.setTimeout(connectWS, 30000)
+      }
     }
 
     ws.onerror = (err) => {
@@ -98,7 +105,12 @@ export default function ChatPage() {
     loadConversations()
     connectWS()
     return () => {
+      closingRef.current = true
+      if (reconnectTimerRef.current) {
+        window.clearTimeout(reconnectTimerRef.current)
+      }
       wsRef.current?.close()
+      wsRef.current = null
     }
   }, [])
 
@@ -111,7 +123,7 @@ export default function ChatPage() {
   const loadMessages = async (convID: number) => {
     try {
       const res = await request.get<any, any>(`/conversations/${convID}/messages`)
-      setMessages(convID, Array.isArray(res) ? res : (res.data || []))
+      setMessages(convID, Array.isArray(res) ? res : (res || []))
     } catch (err) {
       console.error('加载消息失败', err)
     }
@@ -134,7 +146,7 @@ export default function ChatPage() {
     setSearching(true)
     try {
       const res = await searchMessages(searchQuery, activeConvID || undefined)
-      setSearchResults(res.data || [])
+      setSearchResults(res?.messages || [])
     } catch (err) {
       console.error('搜索失败', err)
     } finally {

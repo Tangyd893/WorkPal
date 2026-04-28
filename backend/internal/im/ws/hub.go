@@ -9,20 +9,20 @@ import (
 // Hub WebSocket 连接管理中心
 type Hub struct {
 	// 客户端管理
-	clients    map[int64]*Client       // userID -> Client
-	register   chan *Client            // 注册请求
-	unregister chan *Client            // 注销请求
-	broadcast  chan *BroadcastMsg     // 广播消息
+	clients    map[int64]*Client  // userID -> Client
+	register   chan *Client       // 注册请求
+	unregister chan *Client       // 注销请求
+	broadcast  chan *BroadcastMsg // 广播消息
 
 	// 房间（会话）管理
-	rooms      map[int64]map[*Client]bool // convID -> 客户端集合
-	roomMu     sync.RWMutex
+	rooms  map[int64]map[*Client]bool // convID -> 客户端集合
+	roomMu sync.RWMutex
 
 	// Hub 状态
-	mu         sync.RWMutex
-	running    bool
-	ctx        context.Context
-	cancel     context.CancelFunc
+	mu      sync.RWMutex
+	running bool
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 // BroadcastMsg 广播消息结构
@@ -57,12 +57,14 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client.UserID] = client
+			count := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("[Hub] 用户 %d 已连接 (共 %d 连接)", client.UserID, len(h.clients))
+			log.Printf("[Hub] 用户 %d 已连接 (共 %d 连接)", client.UserID, count)
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[client.UserID]; ok {
 				delete(h.clients, client.UserID)
+				count := len(h.clients)
 				// 从所有房间移除
 				h.roomMu.Lock()
 				for convID, members := range h.rooms {
@@ -72,7 +74,7 @@ func (h *Hub) Run() {
 					}
 				}
 				h.roomMu.Unlock()
-				log.Printf("[Hub] 用户 %d 已断开 (共 %d 连接)", client.UserID, len(h.clients))
+				log.Printf("[Hub] 用户 %d 已断开 (共 %d 连接)", client.UserID, count)
 			}
 			h.mu.Unlock()
 		case msg := <-h.broadcast:
@@ -130,11 +132,18 @@ func (h *Hub) LeaveRoom(client *Client, convID int64) {
 
 // BroadcastToRoom 向房间广播消息
 func (h *Hub) BroadcastToRoom(convID int64, fromID int64, content []byte, exclude *Client) {
-	h.broadcast <- &BroadcastMsg{
+	msg := &BroadcastMsg{
 		ConvID:  convID,
 		FromID:  fromID,
 		Content: content,
 		Exclude: exclude,
+	}
+	select {
+	case <-h.ctx.Done():
+		return
+	case h.broadcast <- msg:
+	default:
+		log.Printf("[Hub] 广播队列已满 convID=%d", convID)
 	}
 }
 

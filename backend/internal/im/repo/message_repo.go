@@ -3,8 +3,8 @@ package repo
 import (
 	"context"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"gorm.io/gorm"
 )
 
@@ -60,22 +60,20 @@ func (r *MessageRepo) CountUnread(ctx context.Context, convID, userID int64) (in
 	var count int64
 	err := r.db.WithContext(ctx).
 		Table("messages m").
-		Joins("LEFT JOIN message_reads mr ON m.id = mr.msg_id AND mr.user_id = ?", userID).
-		Where("m.conv_id = ? AND m.sender_id != ? AND m.deleted_at IS NULL AND mr.msg_id IS NULL", convID, userID).
+		Joins("LEFT JOIN message_reads mr ON mr.conv_id = m.conv_id AND mr.user_id = ?", userID).
+		Where("m.conv_id = ? AND m.sender_id != ? AND m.deleted_at IS NULL AND (mr.read_at IS NULL OR m.created_at > mr.read_at)", convID, userID).
 		Count(&count).Error
 	return count, err
 }
 
 // MarkRead 标记已读
 func (r *MessageRepo) MarkRead(ctx context.Context, userID, convID int64) error {
-	// 标记该会话所有消息为已读（删除已读记录再插入，或直接 UPSERT）
 	return r.db.WithContext(ctx).Exec(`
 		INSERT INTO message_reads (user_id, conv_id, read_at)
-		SELECT ? , ?, NOW()
-		WHERE NOT EXISTS (
-			SELECT 1 FROM message_reads WHERE user_id = ? AND conv_id = ?
-		)
-	`, userID, convID, userID, convID).Error
+		VALUES (?, ?, NOW())
+		ON CONFLICT (user_id, conv_id)
+		DO UPDATE SET read_at = EXCLUDED.read_at
+	`, userID, convID).Error
 }
 
 // Update 更新消息

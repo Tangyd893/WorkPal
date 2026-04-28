@@ -19,7 +19,7 @@
 WorkPal/
 ├── backend/                 # Go 后端
 │   ├── cmd/server/         # 程序入口
-│   ├── configs/            # 配置文件
+│   ├── configs/            # 配置文件（config.example.yaml 提供本地样例）
 │   ├── deployments/        # Docker 部署配置
 │   ├── internal/           # 私有业务代码
 │   │   ├── common/        # 公共组件（errors/middleware/response/pagination）
@@ -143,7 +143,11 @@ docker compose -f docker/docker-compose.yaml ps
 
 ```bash
 cd backend
-GOTOOLCHAIN=local go run cmd/server/main.go
+
+# 首次启动：复制样例配置并按需修改密码、端口和存储路径
+cp configs/config.example.yaml configs/config.yaml
+
+GOTOOLCHAIN=local go run ./cmd/server
 
 # 服务启动在 http://localhost:8080
 ```
@@ -152,7 +156,7 @@ GOTOOLCHAIN=local go run cmd/server/main.go
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 
 # 前端启动在 http://localhost:3000
@@ -167,7 +171,10 @@ npm run dev
 ```bash
 cd backend
 
-# 全部测试（含数据竞争检测）
+# 全部单元测试
+go test ./...
+
+# 并发/数据竞争检测（建议在 Linux CI 或本机 race 环境运行）
 go test -race ./...
 
 # 按模块运行
@@ -197,7 +204,17 @@ node testing/e2e/playwright.mjs
 
 ### CI
 
-每次 PR/Push 自动运行：Go build · golangci-lint · `go test -race` · tsc · vitest · playwright e2e
+每次 PR/Push 自动运行：Go build · golangci-lint · `go test -race` · TypeScript 类型检查 · Vitest。E2E 脚本保留在 `testing/e2e`，需要前后端服务启动后手动运行。
+
+---
+
+## 当前实现说明
+
+- HTTP API 使用统一响应结构 `{ code, message, data }`；非 0 业务码会返回对应 HTTP 状态，前端 Axios 会自动解包 `data`。
+- 会话消息搜索会按当前登录用户加入的会话过滤，避免全局索引跨会话泄露。
+- 文件上传、下载和会话文件列表会校验当前用户是否拥有该文件或属于对应会话。
+- WebSocket 连接会在握手后加入当前用户已有会话房间；聊天消息仍通过 HTTP API 持久化后广播，避免未落库的临时 WS 消息。
+- `config.yaml`、前端构建产物、TypeScript build info 和备用包管理器锁文件不提交到仓库。
 
 ---
 
@@ -280,12 +297,13 @@ MinIO API:     localhost:9000  (Console: localhost:9001, User/Pass: workpal/work
 
 ## 配置说明
 
-配置文件：`backend/configs/config.yaml`
+配置文件：`backend/configs/config.yaml`。仓库提供 `backend/configs/config.example.yaml` 作为本地样例，真实配置文件默认不提交。未设置 `CONFIG_PATH` 时，后端会优先读取 `configs/config.yaml`，不存在时回退到 `configs/config.example.yaml`。
 
 ```yaml
 server:
   port: 8080
-  jwtSecret: "your-secret-key"       # 注意：YAML key 须为 camelCase
+  mode: debug
+  jwtSecret: "your-secret-key"       # 生产环境必须替换
   jwtExpiryHours: 72
 
 database:
@@ -294,24 +312,29 @@ database:
   user: "workpal"
   password: "workpal123"
   dbname: "workpal"
+  maxOpenConns: 25
+  maxIdleConns: 5
 
 redis:
   host: "localhost"
   port: 6379
+  streamsKey: "workpal:streams:messages"
 
 file:
-  store_type: "minio"   # minio / local
+  storeType: "minio"   # minio / local
+  localBaseDir: "./uploads"
+  maxFileSizeMB: 50
   minio:
     endpoint: "localhost:9000"
-    access_key: "workpal"
-    secret_key: "workpal123456"
+    accessKey: "workpal"
+    secretKey: "workpal123456"
     bucket: "workpal"
-    use_ssl: false
+    useSSL: false
 
 search:
   engine: "bleve"
   bleve:
-    index_path: "/tmp/workpal-search"
+    indexPath: "./data/search"
 ```
 
 ---

@@ -155,7 +155,6 @@ func (m *mockConversationRepo) Delete(ctx context.Context, convID int64) error {
 	return nil
 }
 
-
 // === 单元测试 ===
 
 func TestConversationRepo_Create(t *testing.T) {

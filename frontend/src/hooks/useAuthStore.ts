@@ -64,7 +64,9 @@ export const useWSStore = create<WSState>()((set) => ({
     set((state) => ({
       messages: {
         ...state.messages,
-        [convID]: [...(state.messages[convID] || []), msg],
+        [convID]: msg.id && (state.messages[convID] || []).some((item) => item.id === msg.id)
+          ? state.messages[convID]
+          : [...(state.messages[convID] || []), msg],
       },
     })),
   setMessages: (convID, msgs) =>

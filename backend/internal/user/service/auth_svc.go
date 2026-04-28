@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	auth "github.com/Tangyd893/WorkPal/backend/pkg/auth"
 
 	"golang.org/x/crypto/bcrypt"
@@ -19,14 +19,14 @@ type UserRepository interface {
 }
 
 type AuthService struct {
-	userRepo      UserRepository
+	userRepo       UserRepository
 	jwtExpiryHours int
 }
 
 // NewAuthService 注入 *repo.UserRepo（生产）或 mock（测试）
 func NewAuthService(userRepo UserRepository, jwtExpiryHours int) *AuthService {
 	return &AuthService{
-		userRepo:      userRepo,
+		userRepo:       userRepo,
 		jwtExpiryHours: jwtExpiryHours,
 	}
 }
@@ -44,9 +44,9 @@ type LoginReq struct {
 }
 
 type LoginResp struct {
-	Token     string       `json:"token"`
-	ExpiresAt int64        `json:"expires_at"`
-	User      *model.User  `json:"user"`
+	Token     string      `json:"token"`
+	ExpiresAt int64       `json:"expires_at"`
+	User      *model.User `json:"user"`
 }
 
 func (s *AuthService) Register(ctx context.Context, req *RegisterReq) (*model.User, error) {
@@ -90,6 +90,9 @@ func (s *AuthService) Login(ctx context.Context, req *LoginReq) (*LoginResp, err
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		return nil, apperrors.ErrInvalidPassword
 	}
+	if user.Status != 1 {
+		return nil, apperrors.ErrPermissionDenied
+	}
 
 	token, err := auth.GenerateToken(user.ID, user.Username, s.jwtExpiryHours)
 	if err != nil {
@@ -99,6 +102,6 @@ func (s *AuthService) Login(ctx context.Context, req *LoginReq) (*LoginResp, err
 	return &LoginResp{
 		Token:     token,
 		ExpiresAt: time.Now().Add(time.Duration(s.jwtExpiryHours) * time.Hour).Unix(),
-		User:     user,
+		User:      user,
 	}, nil
 }

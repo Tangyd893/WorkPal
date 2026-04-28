@@ -26,10 +26,10 @@ func (User) TableName() string {
 }
 
 type Department struct {
-	ID        int64  `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name      string `gorm:"size:128;not null" json:"name"`
-	ParentID  int64  `gorm:"default:0" json:"parent_id"`
-	LeaderID  int64  `gorm:"default:0" json:"leader_id"`
+	ID        int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	ParentID  int64     `gorm:"default:0" json:"parent_id"`
+	LeaderID  int64     `gorm:"default:0" json:"leader_id"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

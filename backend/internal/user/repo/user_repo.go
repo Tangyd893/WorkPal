@@ -3,8 +3,8 @@ package repo
 import (
 	"context"
 
-	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
+	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	"gorm.io/gorm"
 )
 

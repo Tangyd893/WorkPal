@@ -85,6 +85,6 @@ jobs:
 
       - name: Run tests
         working-directory: ./frontend
-        run: npm test -- --run || true
+        run: npm test
 
       # E2E tests use OpenClaw skill; project-level Playwright tests TBD

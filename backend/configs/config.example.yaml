@@ -1,0 +1,44 @@
+server:
+  port: 8080
+  mode: debug
+  jwtSecret: "dev-only-change-me"
+  jwtExpiryHours: 72
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "workpal"
+  password: "workpal123"
+  dbname: "workpal"
+  maxOpenConns: 25
+  maxIdleConns: 5
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  streamsKey: "workpal:streams:messages"
+
+file:
+  storeType: "minio"
+  localBaseDir: "./uploads"
+  maxFileSizeMB: 50
+  minio:
+    endpoint: "localhost:9000"
+    accessKey: "workpal"
+    secretKey: "workpal123456"
+    bucket: "workpal"
+    useSSL: false
+
+search:
+  engine: "bleve"
+  bleve:
+    indexPath: "./data/search"
+
+ws:
+  readBufferSize: 1024
+  writeBufferSize: 1024
+  pingIntervalSec: 30
+  pongWaitSec: 60
+  maxMessageSize: 65536

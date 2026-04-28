@@ -118,9 +118,9 @@ func (r *RedisStreams) Heal() error {
 	// 重新claim这些消息（idle时间设为0，视为重新激活）
 	for _, p := range pending {
 		r.client.XClaim(ctx, &redis.XClaimArgs{
-			Stream: r.key,
-			Group:  r.group,
-			MinIdle: 0,
+			Stream:   r.key,
+			Group:    r.group,
+			MinIdle:  0,
 			Messages: []string{p.ID},
 		})
 	}

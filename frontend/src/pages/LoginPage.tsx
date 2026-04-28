@@ -20,9 +20,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const raw = await request.post('/auth/login', form)
-      // Backend wraps response in {code, message, data}, so token is at raw.data.token
-      const res = (raw as any).data?.token ? (raw as any).data : (raw as any)
+      const res = await request.post<any, any>('/auth/login', form)
       if (!res.token) throw new Error('登录失败：未收到认证令牌')
       setAuth(res.token, res.user_id, res.username)
       navigate('/', { replace: true })

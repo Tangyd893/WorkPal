@@ -24,7 +24,7 @@ type MessageDoc struct {
 // SearchResult 搜索结果
 type SearchResult struct {
 	Messages []*model.Message `json:"messages"`
-	Total    int64           `json:"total"`
+	Total    int64            `json:"total"`
 }
 
 // SearchService 搜索服务（Bleve 全文索引）
@@ -48,52 +48,10 @@ func NewSearchService(indexPath string) (*SearchService, error) {
 
 // SearchInConv 会话内搜索
 func (s *SearchService) SearchInConv(ctx context.Context, convID int64, query string, page, pageSize int) (*SearchResult, error) {
-	if query == "" {
-		return &SearchResult{Messages: []*model.Message{}, Total: 0}, nil
+	if convID == 0 {
+		return s.GlobalSearch(ctx, query, page, pageSize)
 	}
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return &SearchResult{Messages: []*model.Message{}, Total: 0}, nil
-	}
-
-	offset := (page - 1) * pageSize
-
-	// 使用 Bleve MatchQuery
-	searchRequest := bleve.NewSearchRequest(bleve.NewMatchQuery(query))
-	searchRequest.From = offset
-	searchRequest.Size = pageSize
-	searchRequest.SortBy([]string{"-CreatedAt"})
-
-	result, err := s.index.Search(searchRequest)
-	if err != nil {
-		return nil, err
-	}
-
-	var messages []*model.Message
-	for _, hit := range result.Hits {
-		var doc MessageDoc
-		// 尝试从 _source 字段获取
-		if src, ok := hit.Fields["_source"]; ok {
-			if data, ok := src.([]byte); ok {
-				if err := json.Unmarshal(data, &doc); err != nil {
-					continue
-				}
-			}
-		}
-		// 过滤当前会话
-		if doc.ConvID == convID || convID == 0 {
-			messages = append(messages, &model.Message{
-				ID:        parseInt64(hit.ID),
-				ConvID:    doc.ConvID,
-				SenderID:  doc.SenderID,
-				Content:   doc.Content,
-				Type:      doc.Type,
-				CreatedAt: parseTime(doc.CreatedAt),
-			})
-		}
-	}
-
-	return &SearchResult{Messages: messages, Total: int64(result.Total)}, nil
+	return s.SearchInConvs(ctx, []int64{convID}, query, page, pageSize)
 }
 
 // GlobalSearch 全局搜索
@@ -111,7 +69,8 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, page, pa
 	searchRequest := bleve.NewSearchRequest(bleve.NewMatchQuery(query))
 	searchRequest.From = offset
 	searchRequest.Size = pageSize
-	searchRequest.SortBy([]string{"-CreatedAt"})
+	searchRequest.Fields = []string{"*"}
+	searchRequest.SortBy([]string{"-created_at"})
 
 	result, err := s.index.Search(searchRequest)
 	if err != nil {
@@ -120,16 +79,9 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, page, pa
 
 	var messages []*model.Message
 	for _, hit := range result.Hits {
-		var doc MessageDoc
-		if src, ok := hit.Fields["_source"]; ok {
-			if data, ok := src.([]byte); ok {
-				if err := json.Unmarshal(data, &doc); err != nil {
-					continue
-				}
-			}
-		}
+		doc := docFromFields(hit.ID, hit.Fields)
 		messages = append(messages, &model.Message{
-			ID:        parseInt64(hit.ID),
+			ID:        parseInt64(doc.ID),
 			ConvID:    doc.ConvID,
 			SenderID:  doc.SenderID,
 			Content:   doc.Content,
@@ -139,6 +91,55 @@ func (s *SearchService) GlobalSearch(ctx context.Context, query string, page, pa
 	}
 
 	return &SearchResult{Messages: messages, Total: int64(result.Total)}, nil
+}
+
+func (s *SearchService) SearchInConvs(ctx context.Context, convIDs []int64, query string, page, pageSize int) (*SearchResult, error) {
+	if len(convIDs) == 0 {
+		return &SearchResult{Messages: []*model.Message{}, Total: 0}, nil
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	allowed := make(map[int64]struct{}, len(convIDs))
+	for _, convID := range convIDs {
+		allowed[convID] = struct{}{}
+	}
+
+	fetchSize := page * pageSize * 3
+	if fetchSize < pageSize {
+		fetchSize = pageSize
+	}
+	if fetchSize > 1000 {
+		fetchSize = 1000
+	}
+	result, err := s.GlobalSearch(ctx, query, 1, fetchSize)
+	if err != nil {
+		return nil, err
+	}
+
+	filtered := make([]*model.Message, 0, len(result.Messages))
+	for _, msg := range result.Messages {
+		if _, ok := allowed[msg.ConvID]; ok {
+			filtered = append(filtered, msg)
+		}
+	}
+
+	start := (page - 1) * pageSize
+	if start >= len(filtered) {
+		return &SearchResult{Messages: []*model.Message{}, Total: int64(len(filtered))}, nil
+	}
+	end := start + pageSize
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return &SearchResult{Messages: filtered[start:end], Total: int64(len(filtered))}, nil
 }
 
 // IndexMessage 索引单条消息
@@ -179,6 +180,13 @@ func (s *SearchService) IndexMessages(msgs []*model.Message) error {
 	return s.index.Batch(batch)
 }
 
+func (s *SearchService) DeleteMessage(messageID int64) error {
+	if s.index == nil {
+		return nil
+	}
+	return s.index.Delete(fmt.Sprintf("%d", messageID))
+}
+
 // Close 关闭索引
 func (s *SearchService) Close() error {
 	if s.index != nil {
@@ -207,4 +215,63 @@ func parseTime(s string) time.Time {
 	}
 	t, _ := time.Parse(time.RFC3339, s)
 	return t
+}
+
+func docFromFields(id string, fields map[string]interface{}) MessageDoc {
+	if src, ok := fields["_source"]; ok {
+		var doc MessageDoc
+		switch v := src.(type) {
+		case []byte:
+			if json.Unmarshal(v, &doc) == nil {
+				return doc
+			}
+		case string:
+			if json.Unmarshal([]byte(v), &doc) == nil {
+				return doc
+			}
+		}
+	}
+	return MessageDoc{
+		ID:        fieldString(fields, id, "id", "ID"),
+		ConvID:    fieldInt64(fields, "conv_id", "ConvID"),
+		SenderID:  fieldInt64(fields, "sender_id", "SenderID"),
+		Content:   fieldString(fields, "", "content", "Content"),
+		Type:      int8(fieldInt64(fields, "type", "Type")),
+		CreatedAt: fieldString(fields, "", "created_at", "CreatedAt"),
+	}
+}
+
+func fieldString(fields map[string]interface{}, fallback string, names ...string) string {
+	for _, name := range names {
+		if v, ok := fields[name]; ok {
+			switch value := v.(type) {
+			case string:
+				return value
+			case fmt.Stringer:
+				return value.String()
+			}
+		}
+	}
+	return fallback
+}
+
+func fieldInt64(fields map[string]interface{}, names ...string) int64 {
+	for _, name := range names {
+		if v, ok := fields[name]; ok {
+			switch value := v.(type) {
+			case int64:
+				return value
+			case int:
+				return int64(value)
+			case float64:
+				return int64(value)
+			case json.Number:
+				n, _ := value.Int64()
+				return n
+			case string:
+				return parseInt64(value)
+			}
+		}
+	}
+	return 0
 }

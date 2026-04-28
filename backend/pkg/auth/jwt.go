@@ -41,6 +41,9 @@ func GenerateToken(userID int64, username string, expiryHours int) (string, erro
 // ParseToken 解析并验证 Token
 func ParseToken(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
 		return jwtSecret, nil
 	})
 	if err != nil {

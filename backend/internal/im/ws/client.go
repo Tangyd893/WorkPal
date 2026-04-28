@@ -3,7 +3,9 @@ package ws
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,9 +17,7 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+	CheckOrigin:     CheckOrigin,
 }
 
 type Client struct {
@@ -44,7 +44,6 @@ func (c *Client) Run(ctx context.Context) {
 	c.Hub.Register(c)
 	go c.readLoop(ctx)
 	go c.writeLoop()
-	go c.sendLoop()
 }
 
 func (c *Client) readLoop(ctx context.Context) {
@@ -105,22 +104,6 @@ func (c *Client) writeLoop() {
 	}
 }
 
-func (c *Client) sendLoop() {
-	for {
-		select {
-		case <-c.done:
-			return
-		case msg := <-c.SendCh:
-			if len(c.SendCh) == 0 {
-				select {
-				case c.SendCh <- msg:
-				default:
-				}
-			}
-		}
-	}
-}
-
 func (c *Client) handleMessage(data []byte) {
 	msg, err := Unmarshal(data)
 	if err != nil {
@@ -143,17 +126,7 @@ func (c *Client) handleMessage(data []byte) {
 }
 
 func (c *Client) handleChat(msg *WSMessage) {
-	convID := msg.ConvID
-	// 私聊时 ConvID=0，To 字段是对方 user_id：
-	// TODO: 私聊路由需业务层处理，Hub 这里只做占位
-
-	if convID > 0 {
-		wsData, _ := msg.Marshal()
-		c.Hub.BroadcastToRoom(convID, c.UserID, wsData, c)
-		ack := NewAckMsg(msg.Seq)
-		ackData, _ := ack.Marshal()
-		c.Send(ackData)
-	}
+	c.SendError("chat messages must be sent through HTTP API")
 }
 
 func (c *Client) handlePing() {
@@ -182,7 +155,14 @@ func (c *Client) handleReadAll(msg *WSMessage) {
 }
 
 func (c *Client) Send(data []byte) {
+	defer func() {
+		if recover() != nil {
+			log.Printf("[WS] 发送到已关闭连接 userID=%d", c.UserID)
+		}
+	}()
 	select {
+	case <-c.done:
+		return
 	case c.SendCh <- data:
 	default:
 		log.Printf("[WS] 发送队列已满 userID=%d", c.UserID)
@@ -209,8 +189,36 @@ func (c *Client) cleanup() {
 			c.Conn = nil
 		}
 		c.mu.Unlock()
-		close(c.SendCh)
 	})
+}
+
+func CheckOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	originHost := hostOnly(u.Host)
+	requestHost := hostOnly(r.Host)
+	if strings.EqualFold(originHost, requestHost) {
+		return true
+	}
+	return isLoopbackHost(originHost) && isLoopbackHost(requestHost)
+}
+
+func hostOnly(hostport string) string {
+	host, _, err := net.SplitHostPort(hostport)
+	if err == nil {
+		return host
+	}
+	return hostport
+}
+
+func isLoopbackHost(host string) bool {
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 var defaultHub *Hub

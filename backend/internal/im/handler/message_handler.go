@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -16,8 +17,8 @@ import (
 
 type MessageHandler struct {
 	msgSvc    *service.MessageService
-	convSvc  *service.ConversationService
-	hub      *imWS.Hub
+	convSvc   *service.ConversationService
+	hub       *imWS.Hub
 	searchSvc *searchSvc.SearchService
 }
 
@@ -25,17 +26,17 @@ func NewMessageHandler(msgSvc *service.MessageService, convSvc *service.Conversa
 	return &MessageHandler{
 		msgSvc:    msgSvc,
 		convSvc:   convSvc,
-		hub:      hub,
+		hub:       hub,
 		searchSvc: searchSvc,
 	}
 }
 
 // SendReq 发送消息请求
 type SendReq struct {
-	Type      int8                  `json:"type"`      // 消息类型
-	Content   string                `json:"content"`    // 消息内容
-	Metadata  map[string]interface{} `json:"metadata"`   // 扩展字段
-	ReplyTo   int64                 `json:"reply_to"`   // 回复的消息ID
+	Type     int8                   `json:"type"`     // 消息类型
+	Content  string                 `json:"content"`  // 消息内容
+	Metadata map[string]interface{} `json:"metadata"` // 扩展字段
+	ReplyTo  int64                  `json:"reply_to"` // 回复的消息ID
 }
 
 // GetHistory 获取历史消息（分页）
@@ -116,10 +117,11 @@ func (h *MessageHandler) Send(c *gin.Context) {
 
 	// 通过 WebSocket 广播到房间
 	wsMsg := imWS.NewChatMsg(userID, convID, req.Content, 0)
+	wsMsg.ID = msg.ID
 	wsMsg.CreatedAt = msg.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
 	wsData, _ := wsMsg.Marshal()
 	if h.hub != nil {
-		h.hub.BroadcastToRoom(convID, userID, wsData, nil)
+		h.broadcastToConversation(c.Request.Context(), convID, wsData)
 	}
 
 	// 索引到 Bleve 搜索（非致命，失败不影响消息发送）
@@ -153,6 +155,9 @@ func (h *MessageHandler) Edit(c *gin.Context) {
 		handleServiceErr(c, err)
 		return
 	}
+	if h.searchSvc != nil {
+		_ = h.searchSvc.IndexMessage(msg)
+	}
 	response.Success(c, msg)
 }
 
@@ -169,6 +174,9 @@ func (h *MessageHandler) Delete(c *gin.Context) {
 	if err := h.msgSvc.Recall(c.Request.Context(), msgID, userID); err != nil {
 		handleServiceErr(c, err)
 		return
+	}
+	if h.searchSvc != nil {
+		_ = h.searchSvc.DeleteMessage(msgID)
 	}
 	response.Success(c, nil)
 }
@@ -189,6 +197,15 @@ func (h *MessageHandler) MarkRead(c *gin.Context) {
 		handleServiceErr(c, err)
 		return
 	}
+	isMember, err := h.convSvc.IsMember(c.Request.Context(), msg.ConvID, userID)
+	if err != nil {
+		handleServiceErr(c, err)
+		return
+	}
+	if !isMember {
+		response.Fail(c, apperrors.ErrPermissionDenied)
+		return
+	}
 
 	if err := h.msgSvc.MarkRead(c.Request.Context(), userID, msg.ConvID); err != nil {
 		handleServiceErr(c, err)
@@ -204,6 +221,15 @@ func (h *MessageHandler) MarkReadAll(c *gin.Context) {
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		return
+	}
+	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
+	if err != nil {
+		handleServiceErr(c, err)
+		return
+	}
+	if !isMember {
+		response.Fail(c, apperrors.ErrPermissionDenied)
 		return
 	}
 
@@ -224,4 +250,18 @@ func (h *MessageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth.DELETE("/messages/:id", h.Delete)
 	auth.POST("/messages/:id/read", h.MarkRead)
 	auth.POST("/conversations/:id/read-all", h.MarkReadAll)
+}
+
+func (h *MessageHandler) broadcastToConversation(ctx context.Context, convID int64, wsData []byte) {
+	if h.hub == nil {
+		return
+	}
+	members, err := h.convSvc.GetMembers(ctx, convID)
+	if err != nil {
+		h.hub.BroadcastToRoom(convID, 0, wsData, nil)
+		return
+	}
+	for _, userID := range members {
+		h.hub.SendToUser(userID, wsData)
+	}
 }

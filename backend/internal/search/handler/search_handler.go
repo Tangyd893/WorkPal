@@ -13,7 +13,7 @@ import (
 
 type SearchHandler struct {
 	searchSvc *searchSvc.SearchService
-	convSvc  *service.ConversationService
+	convSvc   *service.ConversationService
 }
 
 func NewSearchHandler(searchSvc *searchSvc.SearchService, convSvc *service.ConversationService) *SearchHandler {
@@ -36,6 +36,15 @@ func (h *SearchHandler) Search(c *gin.Context) {
 	convID, _ := strconv.ParseInt(c.DefaultQuery("conv_id", "0"), 10, 64)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
 
 	// 如果指定了会话，检查权限
 	if convID > 0 {
@@ -53,8 +62,17 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		return
 	}
 
-	// 全局搜索
-	result, err := h.searchSvc.GlobalSearch(c.Request.Context(), query, page, pageSize)
+	// 全局搜索只在当前用户已加入的会话范围内执行，避免跨会话泄露。
+	convs, _, err := h.convSvc.ListByUser(c.Request.Context(), userID, 0, 1000)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	convIDs := make([]int64, 0, len(convs))
+	for _, conv := range convs {
+		convIDs = append(convIDs, conv.ID)
+	}
+	result, err := h.searchSvc.SearchInConvs(c.Request.Context(), convIDs, query, page, pageSize)
 	if err != nil {
 		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
 		return

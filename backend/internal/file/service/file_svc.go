@@ -64,7 +64,7 @@ func (s *LocalFileStore) GetURL(ctx context.Context, key string) (string, error)
 // MinIOFileStore MinIO 对象存储
 type MinIOFileStore struct {
 	client   *minio.Client
-	bucket  string
+	bucket   string
 	endpoint string
 	useSSL   bool
 }
@@ -76,7 +76,7 @@ func NewMinIOFileStore(endpoint, accessKey, secretKey, bucket string, useSSL boo
 	}
 	return &MinIOFileStore{
 		client:   client,
-		bucket:  bucket,
+		bucket:   bucket,
 		endpoint: endpoint,
 		useSSL:   useSSL,
 	}, nil
@@ -111,9 +111,9 @@ func (s *MinIOFileStore) GetURL(ctx context.Context, key string) (string, error)
 
 // FileService 文件服务
 type FileService struct {
-	repo       *repo.FileRepo
-	store      FileStore
-	maxSizeMB  int
+	repo      *repo.FileRepo
+	store     FileStore
+	maxSizeMB int
 }
 
 func NewFileService(repo *repo.FileRepo, store FileStore, maxSizeMB int) *FileService {
@@ -170,6 +170,10 @@ func (s *FileService) GetURL(ctx context.Context, fileID int64) (string, error) 
 		return "", err
 	}
 	return s.store.GetURL(ctx, f.Key)
+}
+
+func (s *FileService) GetByID(ctx context.Context, fileID int64) (*model.File, error) {
+	return s.repo.GetByID(ctx, fileID)
 }
 
 // Download 下载文件

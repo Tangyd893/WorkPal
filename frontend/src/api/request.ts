@@ -2,6 +2,12 @@ import axios from 'axios'
 
 const STORAGE_KEY = 'workpal-auth'
 
+interface ApiResponse<T> {
+  code: number
+  message: string
+  data?: T
+}
+
 // Read token directly from localStorage to avoid Zustand hydration timing issues
 const getStoredToken = (): string | null => {
   try {
@@ -30,7 +36,17 @@ request.interceptors.request.use((config) => {
 
 // 响应拦截器：统一错误处理
 request.interceptors.response.use(
-  (res) => res.data,
+  (res) => {
+    const body = res.data as ApiResponse<unknown> | unknown
+    if (body && typeof body === 'object' && 'code' in body && typeof (body as ApiResponse<unknown>).code === 'number') {
+      const apiBody = body as ApiResponse<unknown>
+      if (apiBody.code !== 0) {
+        throw new Error(apiBody.message || '请求失败')
+      }
+      return apiBody.data ?? null
+    }
+    return body
+  },
   (err) => {
     const msg = err.response?.data?.message || err.message || '网络错误'
     console.error('API Error:', msg)

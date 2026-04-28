@@ -41,3 +41,5 @@ test-results/
 coverage.out
 coverage.html
 backend/configs/config.yaml
+backend/data/
+backend/uploads/

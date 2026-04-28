@@ -52,8 +52,8 @@ func (s *ConversationService) CreatePrivateConv(ctx context.Context, userID, tar
 
 	// 创建新私聊
 	conv = &model.Conversation{
-		Type:     model.ConversationTypePrivate,
-		OwnerID:  userID,
+		Type:      model.ConversationTypePrivate,
+		OwnerID:   userID,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -78,9 +78,9 @@ func (s *ConversationService) CreateGroup(ctx context.Context, name string, owne
 		name = "群聊"
 	}
 	conv := &model.Conversation{
-		Type:     model.ConversationTypeGroup,
-		Name:     name,
-		OwnerID:  ownerID,
+		Type:      model.ConversationTypeGroup,
+		Name:      name,
+		OwnerID:   ownerID,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -134,6 +134,13 @@ func (s *ConversationService) Delete(ctx context.Context, convID, userID int64) 
 
 // AddMember 添加成员
 func (s *ConversationService) AddMember(ctx context.Context, convID, userID int64) error {
+	conv, err := s.convRepo.GetByID(ctx, convID)
+	if err != nil {
+		return err
+	}
+	if conv.Type == model.ConversationTypePrivate {
+		return apperrors.ErrPrivateChatImmutable
+	}
 	ok, err := s.convRepo.IsMember(ctx, convID, userID)
 	if err != nil {
 		return err

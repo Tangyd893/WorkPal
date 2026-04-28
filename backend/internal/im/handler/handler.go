@@ -10,8 +10,8 @@ import (
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/service"
-	"github.com/gin-gonic/gin"
 	ws "github.com/Tangyd893/WorkPal/backend/internal/im/ws"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
@@ -25,10 +25,10 @@ func NewConversationHandler(convSvc *service.ConversationService) *ConversationH
 
 // CreateConvReq 创建会话请求
 type CreateConvReq struct {
-	Type      int8    `json:"type"` // 1=私聊 2=群聊，默认私聊
+	Type      int8    `json:"type"`       // 1=私聊 2=群聊，默认私聊
 	TargetUID int64   `json:"target_uid"` // 私聊目标用户ID
-	Name      string  `json:"name"`        // 群名（群聊时）
-	MemberIDs []int64 `json:"member_ids"`  // 群聊成员ID列表
+	Name      string  `json:"name"`       // 群名（群聊时）
+	MemberIDs []int64 `json:"member_ids"` // 群聊成员ID列表
 }
 
 // Create 创建会话
@@ -181,14 +181,7 @@ func (h *ConversationHandler) AddMember(c *gin.Context) {
 		return
 	}
 
-	// 检查操作者是否是成员
-	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
-	if err != nil {
-		handleServiceErr(c, err)
-		return
-	}
-	if !isMember {
-		response.Fail(c, apperrors.ErrPermissionDenied)
+	if !h.ensureGroupOwner(c, convID, userID) {
 		return
 	}
 
@@ -222,14 +215,7 @@ func (h *ConversationHandler) RemoveMember(c *gin.Context) {
 		return
 	}
 
-	// 检查操作者是否是成员
-	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
-	if err != nil {
-		handleServiceErr(c, err)
-		return
-	}
-	if !isMember {
-		response.Fail(c, apperrors.ErrPermissionDenied)
+	if !h.ensureGroupOwner(c, convID, userID) {
 		return
 	}
 
@@ -253,6 +239,23 @@ func (h *ConversationHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth.DELETE("/conversations/:id/members/:uid", h.RemoveMember)
 }
 
+func (h *ConversationHandler) ensureGroupOwner(c *gin.Context, convID, userID int64) bool {
+	conv, err := h.convSvc.GetByID(c.Request.Context(), convID)
+	if err != nil {
+		handleServiceErr(c, err)
+		return false
+	}
+	if conv.Type == model.ConversationTypePrivate {
+		response.FailWithMessage(c, http.StatusBadRequest, "私聊无法操作成员")
+		return false
+	}
+	if conv.OwnerID != userID {
+		response.Fail(c, apperrors.ErrPermissionDenied)
+		return false
+	}
+	return true
+}
+
 func handleServiceErr(c *gin.Context, err error) {
 	if appErr, ok := err.(*apperrors.AppError); ok {
 		response.Fail(c, appErr)
@@ -263,11 +266,12 @@ func handleServiceErr(c *gin.Context, err error) {
 
 // WebSocketHandler WebSocket 处理
 type WebSocketHandler struct {
-	hub *ws.Hub
+	hub     *ws.Hub
+	convSvc *service.ConversationService
 }
 
-func NewWebSocketHandler(hub *ws.Hub) *WebSocketHandler {
-	return &WebSocketHandler{hub: hub}
+func NewWebSocketHandler(hub *ws.Hub, convSvc *service.ConversationService) *WebSocketHandler {
+	return &WebSocketHandler{hub: hub, convSvc: convSvc}
 }
 
 // Handle WebSocket 升级处理
@@ -283,7 +287,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			return true
+			return ws.CheckOrigin(r)
 		},
 	}
 
@@ -293,7 +297,23 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	hub := ws.GetHub()
+	hub := h.hub
+	if hub == nil {
+		hub = ws.GetHub()
+	}
+	if hub == nil {
+		conn.Close()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "WebSocket Hub 未初始化"})
+		return
+	}
 	client := ws.NewClient(userID, conn, hub)
+	if h.convSvc != nil {
+		convs, _, err := h.convSvc.ListByUser(c.Request.Context(), userID, 0, 1000)
+		if err == nil {
+			for _, conv := range convs {
+				hub.JoinRoom(client, conv.ID)
+			}
+		}
+	}
 	client.Run(c.Request.Context())
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,10 +15,15 @@ import (
 
 type FileHandler struct {
 	fileSvc *service.FileService
+	convSvc conversationAuthorizer
 }
 
-func NewFileHandler(fileSvc *service.FileService) *FileHandler {
-	return &FileHandler{fileSvc: fileSvc}
+type conversationAuthorizer interface {
+	IsMember(ctx context.Context, convID, userID int64) (bool, error)
+}
+
+func NewFileHandler(fileSvc *service.FileService, convSvc conversationAuthorizer) *FileHandler {
+	return &FileHandler{fileSvc: fileSvc, convSvc: convSvc}
 }
 
 // Upload 上传文件
@@ -27,6 +33,9 @@ func (h *FileHandler) Upload(c *gin.Context) {
 
 	// 支持表单参数指定会话 ID
 	convID, _ := strconv.ParseInt(c.PostForm("conv_id"), 10, 64)
+	if convID > 0 && !h.ensureConversationMember(c, convID, userID) {
+		return
+	}
 
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -41,21 +50,33 @@ func (h *FileHandler) Upload(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{
-		"id":          f.ID,
-		"name":        f.Name,
-		"size":        f.Size,
+		"id":           f.ID,
+		"name":         f.Name,
+		"size":         f.Size,
 		"content_type": f.ContentType,
-		"created_at":  f.CreatedAt,
+		"created_at":   f.CreatedAt,
 	})
 }
 
 // Download 下载文件
 // GET /api/v1/files/:id
 func (h *FileHandler) Download(c *gin.Context) {
+	userID := c.GetInt64("userID")
 	fileID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.FailWithMessage(c, http.StatusBadRequest, "无效的文件ID")
 		return
+	}
+
+	meta, err := h.fileSvc.GetByID(c.Request.Context(), fileID)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusNotFound, "文件不存在")
+		return
+	}
+	if meta.UserID != userID {
+		if meta.ConvID <= 0 || !h.ensureConversationMember(c, meta.ConvID, userID) {
+			return
+		}
 	}
 
 	rc, f, err := h.fileSvc.Download(c.Request.Context(), fileID)
@@ -76,9 +97,13 @@ func (h *FileHandler) Download(c *gin.Context) {
 // ListByConv 获取会话文件列表
 // GET /api/v1/conversations/:id/files
 func (h *FileHandler) ListByConv(c *gin.Context) {
+	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		return
+	}
+	if !h.ensureConversationMember(c, convID, userID) {
 		return
 	}
 
@@ -121,4 +146,21 @@ func (h *FileHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth.GET("/files", h.ListByUser)
 	auth.GET("/files/:id", h.Download)
 	auth.GET("/conversations/:id/files", h.ListByConv)
+}
+
+func (h *FileHandler) ensureConversationMember(c *gin.Context, convID, userID int64) bool {
+	if h.convSvc == nil {
+		response.FailWithMessage(c, http.StatusForbidden, "无权限访问该会话资源")
+		return false
+	}
+	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
+	if err != nil {
+		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
+		return false
+	}
+	if !isMember {
+		response.FailWithMessage(c, http.StatusForbidden, "无权限访问该会话资源")
+		return false
+	}
+	return true
 }

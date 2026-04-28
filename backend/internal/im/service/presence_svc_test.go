@@ -30,7 +30,7 @@ func TestPresenceService(t *testing.T) {
 	})
 
 	t.Run("SetOffline 设置离线", func(t *testing.T) {
-			err := svc.SetOnline(ctx, 2)
+		err := svc.SetOnline(ctx, 2)
 		assert.NoError(t, err)
 		err = svc.SetOffline(ctx, 2)
 		assert.NoError(t, err)

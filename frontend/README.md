@@ -35,15 +35,16 @@ frontend/
 
 ```bash
 # 安装依赖
-pnpm install
-# 或
-npm install
+npm ci
 
 # 开发模式
-pnpm dev    # 启动在 http://localhost:3000
+npm run dev    # 启动在 http://localhost:3000
 
 # 构建生产版本
-pnpm build
+npm run build
+
+# 单元测试
+npm test
 ```
 
 ## 环境变量
@@ -58,3 +59,7 @@ VITE_WS_URL=ws://localhost:8080/ws
 ## 接口代理
 
 Vite 配置了 `/api` 到后端 `localhost:8080` 的代理，开发环境无需处理跨域。
+
+## API 响应约定
+
+后端统一返回 `{ code, message, data }`。`src/api/request.ts` 会在 `code === 0` 时自动返回 `data`，非 0 时抛出错误；页面代码不需要再手动读取外层 `data`。
