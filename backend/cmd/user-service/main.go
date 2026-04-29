@@ -17,7 +17,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	db, sqlDB, err := platform.OpenDB(cfg)
+	db, sqlDB, err := platform.OpenServiceDB(cfg, "user-service")
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
@@ -40,7 +40,7 @@ func main() {
 	userHdlr := userHandler.NewUserHandler(userSvc, authSvc)
 
 	r := platform.NewRouter(cfg, "user-service")
-	platform.RegisterHealth(r, sqlDB, nil)
+	platform.RegisterHealth(r, "user-service", platform.SQLHealthCheck("postgres", sqlDB))
 	apiV1 := r.Group("/api/v1")
 	userHdlr.RegisterRoutes(apiV1)
 

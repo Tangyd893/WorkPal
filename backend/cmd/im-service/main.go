@@ -21,7 +21,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	db, sqlDB, err := platform.OpenDB(cfg)
+	db, sqlDB, err := platform.OpenServiceDB(cfg, "im-service")
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
@@ -58,7 +58,12 @@ func main() {
 	wsHandler := handler.NewWebSocketHandler(hub, convSvc)
 
 	r := platform.NewRouter(cfg, "im-service")
-	platform.RegisterHealth(r, sqlDB, redisClient)
+	platform.RegisterHealth(
+		r,
+		"im-service",
+		platform.SQLHealthCheck("postgres", sqlDB),
+		platform.RedisHealthCheck("redis", redisClient),
+	)
 	apiV1 := r.Group("/api/v1")
 	convHandler.RegisterRoutes(apiV1)
 	msgHandler.RegisterRoutes(apiV1)

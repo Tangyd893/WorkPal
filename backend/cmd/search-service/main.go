@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 
@@ -18,12 +19,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
-
-	_, sqlDB, err := platform.OpenDB(cfg)
-	if err != nil {
-		log.Fatalf("open database: %v", err)
-	}
-	defer sqlDB.Close()
 
 	redisClient, err := platform.OpenRedis(cfg)
 	if err != nil {
@@ -45,7 +40,15 @@ func main() {
 	searchHdlr := searchHandler.NewSearchHandler(searchService, convSvc)
 
 	r := platform.NewRouter(cfg, "search-service")
-	platform.RegisterHealth(r, sqlDB, redisClient)
+	platform.RegisterHealth(
+		r,
+		"search-service",
+		platform.RedisHealthCheck("redis", redisClient),
+		platform.NamedHealthCheck("bleve", func(ctx context.Context) error {
+			_, err := searchService.Search(ctx, "health", 1, 1)
+			return err
+		}),
+	)
 	apiV1 := r.Group("/api/v1")
 	searchHdlr.RegisterRoutes(apiV1)
 

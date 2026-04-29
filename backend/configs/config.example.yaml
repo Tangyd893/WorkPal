@@ -22,9 +22,14 @@ database:
   port: 5432
   user: "workpal"
   password: "workpal123"
-  dbname: "workpal"
+  adminDBName: "postgres"
   maxOpenConns: 25
   maxIdleConns: 5
+  names:
+    user: "workpal_user"
+    im: "workpal_im"
+    file: "workpal_file"
+    workspace: "workpal_workspace"
 
 redis:
   host: "localhost"

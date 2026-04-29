@@ -18,7 +18,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	db, sqlDB, err := platform.OpenDB(cfg)
+	db, sqlDB, err := platform.OpenServiceDB(cfg, "file-service")
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
@@ -36,7 +36,7 @@ func main() {
 	fileHdlr := fileHandler.NewFileHandler(fileService, convSvc)
 
 	r := platform.NewRouter(cfg, "file-service")
-	platform.RegisterHealth(r, sqlDB, nil)
+	platform.RegisterHealth(r, "file-service", platform.SQLHealthCheck("postgres", sqlDB))
 	apiV1 := r.Group("/api/v1")
 	fileHdlr.RegisterRoutes(apiV1)
 

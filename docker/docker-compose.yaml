@@ -65,6 +65,11 @@ services:
       CONFIG_PATH: /app/configs/config.example.yaml
       SERVER_MODE: debug
       DATABASE_HOST: postgres
+      DATABASE_ADMINDBNAME: postgres
+      DATABASE_NAMES_USER: workpal_user
+      DATABASE_NAMES_IM: workpal_im
+      DATABASE_NAMES_FILE: workpal_file
+      DATABASE_NAMES_WORKSPACE: workpal_workspace
       REDIS_HOST: redis
       FILE_STORETYPE: minio
       FILE_MINIO_ENDPOINT: minio:9000

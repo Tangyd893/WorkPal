@@ -16,7 +16,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	db, sqlDB, err := platform.OpenDB(cfg)
+	db, sqlDB, err := platform.OpenServiceDB(cfg, "workspace-service")
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
@@ -31,7 +31,7 @@ func main() {
 	handler := workspaceHandler.NewHandler(svc)
 
 	r := platform.NewRouter(cfg, "workspace-service")
-	platform.RegisterHealth(r, sqlDB, nil)
+	platform.RegisterHealth(r, "workspace-service", platform.SQLHealthCheck("postgres", sqlDB))
 	apiV1 := r.Group("/api/v1")
 	handler.RegisterRoutes(apiV1)
 

@@ -43,9 +43,39 @@ type DatabaseConfig struct {
 	Port         int
 	User         string
 	Password     string
-	DBName       string
+	AdminDBName  string
 	MaxOpenConns int
 	MaxIdleConns int
+	Names        DatabaseNames `mapstructure:"names"`
+}
+
+type DatabaseNames struct {
+	User      string `mapstructure:"user"`
+	IM        string `mapstructure:"im"`
+	File      string `mapstructure:"file"`
+	Workspace string `mapstructure:"workspace"`
+}
+
+func (d DatabaseConfig) DSN(dbName string) string {
+	return fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		d.Host, d.Port, d.User, d.Password, dbName,
+	)
+}
+
+func (d DatabaseConfig) ServiceDBName(service string) (string, error) {
+	switch service {
+	case "user-service":
+		return d.Names.User, nil
+	case "im-service":
+		return d.Names.IM, nil
+	case "file-service":
+		return d.Names.File, nil
+	case "workspace-service":
+		return d.Names.Workspace, nil
+	default:
+		return "", fmt.Errorf("service %q does not own a database", service)
+	}
 }
 
 type RedisConfig struct {
@@ -56,7 +86,7 @@ type RedisConfig struct {
 	StreamsKey string
 }
 
-func (r *RedisConfig) Addr() string {
+func (r RedisConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", r.Host, r.Port)
 }
 
@@ -115,15 +145,19 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("services.fileURL", "http://localhost:8083")
 	viper.SetDefault("services.searchURL", "http://localhost:8084")
 	viper.SetDefault("services.workspaceURL", "http://localhost:8085")
+	viper.SetDefault("database.adminDBName", "postgres")
 	viper.SetDefault("database.maxOpenConns", 25)
 	viper.SetDefault("database.maxIdleConns", 5)
+	viper.SetDefault("database.names.user", "workpal_user")
+	viper.SetDefault("database.names.im", "workpal_im")
+	viper.SetDefault("database.names.file", "workpal_file")
+	viper.SetDefault("database.names.workspace", "workpal_workspace")
 	viper.SetDefault("redis.streamsKey", "workpal:streams:messages")
 	viper.SetDefault("file.storeType", "local")
 	viper.SetDefault("file.localBaseDir", "./uploads")
 	viper.SetDefault("file.maxFileSizeMB", 50)
 	viper.SetDefault("search.bleve.indexPath", "./data/search")
 
-	// 支持环境变量覆盖
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
@@ -137,11 +171,4 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	return &cfg, nil
-}
-
-func (d *DatabaseConfig) DSN() string {
-	return fmt.Sprintf(
-		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		d.Host, d.Port, d.User, d.Password, d.DBName,
-	)
 }

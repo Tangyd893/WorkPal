@@ -44,11 +44,20 @@ func main() {
 	}
 
 	limiter := newRateLimiter(rateLimit, rateWindow)
+	healthClient := &http.Client{Timeout: 3 * time.Second}
 	r := platform.NewRouter(cfg, "gateway")
 	r.Use(requestIDMiddleware())
 	r.Use(gatewayAccessLog())
 	r.Use(rateLimitMiddleware(limiter))
-	platform.RegisterHealth(r, nil, nil)
+	platform.RegisterHealth(
+		r,
+		"gateway",
+		platform.HTTPHealthCheck("user-service", serviceHealthURL(cfg.Services.UserURL), healthClient),
+		platform.HTTPHealthCheck("im-service", serviceHealthURL(cfg.Services.IMURL), healthClient),
+		platform.HTTPHealthCheck("file-service", serviceHealthURL(cfg.Services.FileURL), healthClient),
+		platform.HTTPHealthCheck("search-service", serviceHealthURL(cfg.Services.SearchURL), healthClient),
+		platform.HTTPHealthCheck("workspace-service", serviceHealthURL(cfg.Services.WorkspaceURL), healthClient),
+	)
 	r.NoRoute(func(c *gin.Context) {
 		proxy := proxies.match(c.Request.URL.Path)
 		if proxy == nil {
@@ -274,4 +283,8 @@ func forwardedProto(r *http.Request) string {
 		return "https"
 	}
 	return "http"
+}
+
+func serviceHealthURL(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/health"
 }

@@ -1,126 +1,115 @@
 # WorkPal Backend
 
-This is the Go backend for WorkPal.
+This directory contains the Go backend for WorkPal. The backend now runs only in microservice form; the legacy all-in-one server entrypoint is gone.
 
-If your goal is to boot the whole project locally, start with the repo root [README.md](../README.md). This document focuses on backend-specific structure and debugging notes.
+## Service map
 
-## What the backend provides
+| Service | Entry | Storage boundary | Responsibility |
+| --- | --- | --- | --- |
+| Gateway | `cmd/gateway` | stateless | ingress, reverse proxy, rate limit, aggregated health |
+| User Service | `cmd/user-service` | `workpal_user` | auth, users, departments, employees, dev seed data |
+| IM Service | `cmd/im-service` | `workpal_im` | conversations, messages, announcements, WebSocket |
+| File Service | `cmd/file-service` | `workpal_file` | file metadata and object storage access |
+| Search Service | `cmd/search-service` | Bleve + Redis Streams | message indexing and search |
+| Workspace Service | `cmd/workspace-service` | `workpal_workspace` | tasks and schedule |
 
-- authentication and JWT issuance
-- user, employee, and department directory data
-- direct chat and group chat
-- message search and WebSocket realtime delivery
-- personal files and group files
-- workspace task and schedule APIs
-- health checks and Prometheus metrics
+## Startup
 
-## Main startup path
+If you want the simplest full-project path, use the repo root [README.md](../README.md).
 
-For normal local development, use the integrated server:
+If you want to run backend services manually, start infrastructure first:
 
 ```powershell
-cd backend
-go run ./cmd/server
+docker compose -f docker/docker-compose.yaml up -d postgres redis minio
 ```
 
-That entrypoint wires together:
+Then, from `backend`, run each service in its own terminal:
 
-- user module
-- IM module
-- search module
-- file module
-- workspace module
+```powershell
+go run ./cmd/user-service
+```
 
-## Config resolution
+```powershell
+go run ./cmd/im-service
+```
 
-The backend reads config in this order:
+```powershell
+go run ./cmd/file-service
+```
+
+```powershell
+go run ./cmd/search-service
+```
+
+```powershell
+go run ./cmd/workspace-service
+```
+
+```powershell
+go run ./cmd/gateway
+```
+
+## Config lookup
+
+Each service resolves config in this order:
 
 1. `CONFIG_PATH`
 2. `backend/configs/config.yaml`
 3. `backend/configs/config.example.yaml`
 
-So the sample config is enough to start locally unless you need custom overrides.
+The sample config is enough for local development unless you need overrides.
 
-## Local dependencies
+## Database ownership
 
-The backend expects:
+The services no longer share one application database. On first startup they ensure the databases they own exist:
 
-- PostgreSQL
-- Redis
-- MinIO or local file storage fallback
+- User Service -> `workpal_user`
+- IM Service -> `workpal_im`
+- File Service -> `workpal_file`
+- Workspace Service -> `workpal_workspace`
 
-Recommended startup from the repo root:
+Search Service does not own a PostgreSQL database in the current design. It keeps search state in a Bleve index and consumes message events from Redis Streams.
 
-```powershell
-docker compose -f docker/docker-compose.yaml up -d
-```
+## Seeded development data
 
-## Seed data in development mode
-
-When `server.mode != release`, the backend automatically ensures:
+When `server.mode != release`, User Service automatically ensures:
 
 - departments
-- employees
+- employee profiles
 - acceptance accounts
 
-Seeded accounts:
-
-| Username | Password | Role |
-|---|---|---|
+| Username | Password | Suggested role |
+| --- | --- | --- |
 | `admin` | `admin123` | admin |
 | `emma.chen` | `workpal123` | operations |
 | `liam.wang` | `workpal123` | engineering |
 | `sofia.zhao` | `workpal123` | design |
 
-This seed data is what powers the frontend directory filters and multi-user chat testing.
+## Health endpoints
 
-## Package layout
+Every service exposes:
 
-Core backend code lives under `backend/internal`:
-
-- `user`: auth, user data, employee and department directory
-- `im`: conversations, messages, presence, WebSocket
-- `file`: upload, download, share, delete
-- `search`: Bleve-backed message search
-- `workspace`: tasks and schedule APIs
-- `common`: middleware, response helpers, pagination, errors
-- `platform`: runtime bootstrap and dev seed helpers
-
-Supporting packages:
-
-- `pkg/auth`: JWT helpers
-- `pkg/cache`: Redis cache bootstrap
-- `pkg/msgqueue`: Redis Streams abstraction
-
-## API highlights
-
-Key routes include:
-
-- `POST /api/v1/auth/login`
-- `GET /api/v1/users/me`
-- `GET /api/v1/users`
-- `GET /api/v1/departments`
-- `POST /api/v1/conversations`
-- `POST /api/v1/conversations/:id/messages`
-- `PUT /api/v1/conversations/:id/announcement`
-- `GET /api/v1/conversations/:id/files`
-- `POST /api/v1/files/upload`
-- `GET /api/v1/tasks`
-- `POST /api/v1/tasks`
-- `GET /api/v1/schedule`
-- `POST /api/v1/schedule`
+- `GET /`
 - `GET /health`
 - `GET /metrics`
 
-## Realtime behavior
+Gateway health is aggregated. `GET http://localhost:8080/health` actively checks all downstream services.
 
-WebSocket endpoint:
+## Package layout
 
-```text
-/ws?token=<jwt>
-```
+Key folders:
 
-The server loads all conversations for the authenticated user and joins those rooms on connect.
+- `configs`: config model and sample config
+- `cmd`: service entrypoints
+- `internal/platform`: shared runtime bootstrap and development seed helpers
+- `internal/user`: auth and directory domain
+- `internal/im`: conversations, messages, WebSocket
+- `internal/file`: uploads, file metadata, share and delete flows
+- `internal/search`: Bleve search logic
+- `internal/workspace`: tasks and schedule
+- `pkg/msgqueue`: Redis Streams abstraction
+- `pkg/auth`: JWT helpers
+- `pkg/cache`: Redis-backed cache bootstrap
 
 ## Tests
 
@@ -131,21 +120,8 @@ cd backend
 go test ./...
 ```
 
-Optional race test:
+Optional build check:
 
 ```powershell
-go test -race ./...
+make build-services
 ```
-
-## About the other `cmd/*` services
-
-This repo also contains entrypoints such as:
-
-- `cmd/gateway`
-- `cmd/user-service`
-- `cmd/im-service`
-- `cmd/file-service`
-- `cmd/search-service`
-- `cmd/workspace-service`
-
-They reflect a microservice-oriented evolution path. For everyday local debugging, `cmd/server` is still the simplest and most complete entrypoint.

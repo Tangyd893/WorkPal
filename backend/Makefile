@@ -1,11 +1,10 @@
-.PHONY: deps run run-server run-gateway run-user run-im run-file run-search run-workspace test build build-services docker-up docker-down migrate lint clean
+.PHONY: deps run-gateway run-user run-im run-file run-search run-workspace test build-services docker-up docker-down lint clean help
 
 # Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOTEST=$(GOCMD) test
 GOMOD=$(GOCMD) mod
-BINARY=server
 
 # Docker
 DC=docker compose -f ../docker/docker-compose.yaml
@@ -13,12 +12,6 @@ DC=docker compose -f ../docker/docker-compose.yaml
 deps:
 	$(GOMOD) download
 	$(GOMOD) tidy
-
-run:
-	$(GOCMD) run ./cmd/server
-
-run-server:
-	$(GOCMD) run ./cmd/server
 
 run-gateway:
 	$(GOCMD) run ./cmd/gateway
@@ -37,9 +30,6 @@ run-search:
 
 run-workspace:
 	$(GOCMD) run ./cmd/workspace-service
-
-build:
-	CGO_ENABLED=0 $(GOBUILD) -o $(BINARY) ./cmd/server
 
 build-services:
 	mkdir -p bin
@@ -66,17 +56,15 @@ docker-down:
 	$(DC) down
 
 clean:
-	rm -f $(BINARY)
+	rm -rf bin
 
 help:
 	@echo "WorkPal Backend Makefile"
 	@echo ""
 	@echo "  make deps        - Download and tidy Go dependencies"
-	@echo "  make docker-up   - Start postgres, redis, and minio containers"
+	@echo "  make docker-up   - Start the full microservice stack in Docker"
 	@echo "  make docker-down - Stop containers"
-	@echo "  make build       - Build all-in-one server binary"
 	@echo "  make build-services - Build gateway and microservice binaries"
-	@echo "  make run         - Run all-in-one server (compatibility mode)"
 	@echo "  make run-gateway - Run API gateway"
 	@echo "  make run-user    - Run user service"
 	@echo "  make run-im      - Run IM service"

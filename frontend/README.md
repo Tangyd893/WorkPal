@@ -1,17 +1,17 @@
 # WorkPal Frontend
 
-This is the React + Vite frontend for WorkPal.
+This directory contains the React + Vite frontend for WorkPal.
 
-If you want to boot the whole project, read the repo root [README.md](../README.md) first. This file focuses on frontend structure and learning points.
+## What the frontend expects
 
-## Frontend stack
+The frontend talks only to the API gateway at `http://localhost:8080`.
 
-- React 18
-- Vite
-- TypeScript
-- Zustand
-- Axios
-- Playwright for smoke testing
+Proxy rules in `vite.config.ts`:
+
+- `/api/*` -> `http://localhost:8080`
+- `/ws` -> `ws://localhost:8080`
+
+That means the frontend stays stable even though the backend is split into multiple domain services behind the gateway.
 
 ## Start the frontend
 
@@ -27,25 +27,16 @@ Open:
 http://localhost:3000
 ```
 
-## Proxy behavior
+## Workspace modules
 
-Defined in [vite.config.ts](vite.config.ts):
+After login, the app routes into a workspace shell with these modules:
 
-- `/api/*` -> `http://localhost:8080`
-- `/ws` -> `ws://localhost:8080`
-
-That means the frontend expects the backend to be running on `http://localhost:8080`.
-
-## Main pages and modules
-
-After login, the app routes into a workspace shell:
-
-- `Overview / 总览`
-- `Chat / 沟通`
-- `Tasks / 任务`
-- `Schedule / 日程`
-- `Files / 文件`
-- `Directory / 通讯录`
+- Overview
+- Chat
+- Tasks
+- Schedule
+- Files
+- Directory
 
 ## User-facing capabilities
 
@@ -53,28 +44,25 @@ After login, the app routes into a workspace shell:
 - language switch: `English / 简体中文`
 - light and dark theme
 - message sound toggle
-- compact density toggle
+- density toggle
 - direct chat and group chat
 - group announcement and group files
 - directory search by name, phone, title, employee number, and department
-- task CRUD and share actions
-- schedule CRUD and share actions
-- file upload, open, share, and delete actions
+- task create, update, share, and delete
+- schedule create, share, and delete
+- file upload, share, and delete
 
 ## Source layout
 
-Key frontend folders:
+- `src/pages`: route-level pages such as `LoginPage`, `WorkspacePage`, and `ChatPage`
+- `src/components`: workspace and chat UI components
+- `src/api`: API wrappers and response unwrapping
+- `src/hooks`: auth, preferences, and chat controller state
+- `src/types`: shared TypeScript models
+- `src/data`: seeded display data still used by overview summaries and knowledge cards
+- `src/styles`: global styles
 
-- `src/pages`: route-level pages such as `LoginPage` and `WorkspacePage`
-- `src/components`: module UIs for workspace and chat
-- `src/api`: backend request wrappers
-- `src/hooks`: Zustand-backed auth, preferences, and chat state logic
-- `src/types`: shared frontend types
-- `src/data`: seeded display data used by the overview and knowledge cards
-- `src/utils`: storage, clipboard, and notification helpers
-- `src/styles`: global CSS
-
-## Backend-backed vs seeded UI data
+## Backend-backed vs display-only data
 
 ### Backend-backed
 
@@ -85,27 +73,16 @@ Key frontend folders:
 - message history and search
 - group announcement
 - group files
-- personal file uploads
+- personal files
 - tasks
 - schedule
 
-### Seeded or display-only data
+### Display-only right now
 
-- overview summaries
-- seeded knowledge cards in the files module
-
-So the workspace shell mixes real backend data with a few curated demo cards to make the product surface more complete during acceptance.
-
-## State management notes
-
-- auth state lives in Zustand and persists in local storage
-- UI preferences also persist in local storage
-- chat runtime state is coordinated through `useChatController`
-- most module actions are routed through `workpalApi`
+- overview summary composition
+- seeded knowledge cards inside the files module
 
 ## Tests
-
-Unit and build checks:
 
 ```powershell
 cd frontend
