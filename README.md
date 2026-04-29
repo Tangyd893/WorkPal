@@ -2,11 +2,11 @@
 
 [中文说明](README-cn.md) | English
 
-WorkPal is a Go + React office collaboration demo that now runs as a real microservice project rather than a hybrid monolith. The backend has a single public entry at the API gateway, while domain services own their own data and runtime boundaries.
+WorkPal is a Go + React office collaboration demo that now runs as a real microservice project rather than a hybrid monolith. The frontend talks to a single API gateway, while domain services own their own runtime and storage boundaries.
 
 ## What the project includes
 
-- seeded acceptance accounts for admin and employees
+- seeded admin and employee acceptance accounts
 - bilingual UI: `English / 简体中文`
 - light and dark theme, message sound toggle, density toggle
 - overview, chat, tasks, schedule, files, and directory modules
@@ -54,18 +54,34 @@ Continue only when the output contains both `Client` and `Server`.
 
 ## Microservice topology
 
-The backend is organized around one gateway and five domain services:
-
 | Service | Storage boundary | Main responsibility |
 | --- | --- | --- |
-| Gateway | stateless | single ingress, reverse proxy, rate limit, aggregated health |
+| Gateway | stateless | ingress, route catalog, service catalog, rate limit, retry, circuit breaker, health |
 | User Service | `workpal_user` | login, users, departments, employees, dev seed data |
 | IM Service | `workpal_im` | direct chat, group chat, messages, announcements, WebSocket |
 | File Service | `workpal_file` | file metadata, upload, share, delete |
 | Search Service | Bleve + Redis Streams | message indexing and search |
 | Workspace Service | `workpal_workspace` | tasks and schedule |
 
-The gateway health endpoint is aggregated. `GET /health` on port `8080` checks every downstream service, so it reflects the real backend state rather than only the gateway process.
+## Gateway learning surface
+
+The gateway is now a real microservice entry layer instead of a plain reverse proxy. It exposes:
+
+- `GET /health/live`
+- `GET /health/ready`
+- `GET /health`
+- `GET /gateway/routes`
+- `GET /gateway/services`
+
+It also implements:
+
+- request IDs
+- basic rate limiting
+- service-level timeouts
+- retries for idempotent read requests only
+- per-service circuit breakers
+
+If you know Spring Cloud Alibaba, you can read this layer as a lightweight Go mapping of Gateway + Sentinel concepts, with a static service catalog instead of a dynamic registry.
 
 ## Quick start
 
@@ -84,7 +100,7 @@ Expected result:
 - `postgres`, `redis`, and `minio` are `Up` or `healthy`
 - `gateway`, `user-service`, `im-service`, `file-service`, `search-service`, and `workspace-service` are `Up`
 
-On first boot, the backend services automatically create the service-owned databases they need:
+On first boot, backend services automatically create the service-owned databases they need:
 
 - `workpal_user`
 - `workpal_im`
@@ -158,45 +174,17 @@ In the default development mode, User Service automatically ensures these accoun
 | Employee | `liam.wang` | `workpal123` |
 | Employee | `sofia.zhao` | `workpal123` |
 
-Seeded department and employee profile data is also created automatically, so directory filtering and search work out of the box.
-
 ## Quick verification
 
-### Gateway health
-
 ```powershell
+Invoke-RestMethod http://localhost:8080/health/live
+Invoke-RestMethod http://localhost:8080/health/ready
 Invoke-RestMethod http://localhost:8080/health
+Invoke-RestMethod http://localhost:8080/gateway/routes
+Invoke-RestMethod http://localhost:8080/gateway/services
 ```
 
-Expected result:
-
-- HTTP `200`
-- `status` is `ok`
-- `components` lists the five downstream services
-
-### Login API
-
-```powershell
-$body = @{
-  username = "admin"
-  password = "admin123"
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/v1/auth/login" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-Expected result:
-
-- `code` is `0`
-- `data.token` exists
-
-### Frontend login
-
-Open `http://localhost:3000`, log in with `admin / admin123`, and confirm the app redirects to `/workspace/overview`.
+You should see a live gateway, a ready gateway with healthy downstreams, a route catalog, and a service catalog with timeout / retry / circuit-breaker metadata.
 
 ## Tests
 

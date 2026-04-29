@@ -6,7 +6,7 @@ This directory contains the Go backend for WorkPal. The backend now runs only in
 
 | Service | Entry | Storage boundary | Responsibility |
 | --- | --- | --- | --- |
-| Gateway | `cmd/gateway` | stateless | ingress, reverse proxy, rate limit, aggregated health |
+| Gateway | `cmd/gateway` | stateless | ingress, route catalog, service catalog, rate limit, retry, circuit breaker, health |
 | User Service | `cmd/user-service` | `workpal_user` | auth, users, departments, employees, dev seed data |
 | IM Service | `cmd/im-service` | `workpal_im` | conversations, messages, announcements, WebSocket |
 | File Service | `cmd/file-service` | `workpal_file` | file metadata and object storage access |
@@ -85,15 +85,38 @@ When `server.mode != release`, User Service automatically ensures:
 | `liam.wang` | `workpal123` | engineering |
 | `sofia.zhao` | `workpal123` | design |
 
-## Health endpoints
+## Gateway management surface
 
-Every service exposes:
+Gateway now exposes a small but useful control plane for learning and debugging:
 
-- `GET /`
-- `GET /health`
-- `GET /metrics`
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health/live` | liveness |
+| `GET /health/ready` | readiness across downstream services |
+| `GET /health` | aggregated health |
+| `GET /gateway/routes` | route catalog |
+| `GET /gateway/services` | downstream service catalog and circuit-breaker state |
 
-Gateway health is aggregated. `GET http://localhost:8080/health` actively checks all downstream services.
+The gateway also applies:
+
+- request IDs
+- basic rate limiting
+- service-level timeouts
+- retries for idempotent read requests only
+- per-service circuit breakers
+
+## Gateway code reading order
+
+If gateway behavior is what you want to study first, read the files in this order:
+
+1. `cmd/gateway/main.go`
+2. `cmd/gateway/app.go`
+3. `cmd/gateway/rate_limit.go`
+4. `cmd/gateway/transport.go`
+5. `cmd/gateway/breaker.go`
+6. `cmd/gateway/gateway_test.go`
+
+This roughly maps to the same concepts you would study in a Spring Cloud Gateway + Sentinel stack, but implemented in a lightweight Go style.
 
 ## Package layout
 

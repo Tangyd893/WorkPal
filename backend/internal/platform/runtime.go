@@ -128,7 +128,11 @@ func NewRouter(cfg *config.Config, serviceName string) *gin.Engine {
 }
 
 func RegisterHealth(r *gin.Engine, serviceName string, checks ...HealthCheck) {
-	r.GET("/health", func(c *gin.Context) {
+	r.GET("/health", HealthHandler(serviceName, checks...))
+}
+
+func HealthHandler(serviceName string, checks ...HealthCheck) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		components := make(map[string]string, len(checks))
 		errorsByComponent := map[string]string{}
 		statusCode := http.StatusOK
@@ -158,7 +162,7 @@ func RegisterHealth(r *gin.Engine, serviceName string, checks ...HealthCheck) {
 			body["errors"] = errorsByComponent
 		}
 		c.JSON(statusCode, body)
-	})
+	}
 }
 
 func SQLHealthCheck(name string, sqlDB *sql.DB) HealthCheck {

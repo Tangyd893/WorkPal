@@ -65,8 +65,49 @@ async function testHealthEndpoint() {
     assert(response.status() === 200, `health endpoint returns 200 (actual: ${response.status()})`)
     const body = await response.json()
     assert(body.status === 'ok', 'health payload contains status=ok')
+    assert(Boolean(response.headers()['x-request-id']), 'health endpoint returns an X-Request-ID header')
   } catch (error) {
     assert(false, `health endpoint failed: ${error.message}`)
+  }
+}
+
+async function testGatewayControlPlane() {
+  console.log('\n[Test] gateway control plane')
+
+  try {
+    const liveResponse = await page.request.get(`${API_URL}/health/live`)
+    assert(liveResponse.status() === 200, `gateway live health returns 200 (actual: ${liveResponse.status()})`)
+    const liveBody = await liveResponse.json()
+    assert(liveBody.service === 'gateway', 'gateway live health identifies the gateway service')
+
+    const readyResponse = await page.request.get(`${API_URL}/health/ready`)
+    assert(readyResponse.status() === 200, `gateway readiness returns 200 (actual: ${readyResponse.status()})`)
+    const readyBody = await readyResponse.json()
+    assert(readyBody.status === 'ok', 'gateway readiness reports status=ok')
+
+    const routesResponse = await page.request.get(`${API_URL}/gateway/routes`)
+    assert(routesResponse.status() === 200, `gateway route catalog returns 200 (actual: ${routesResponse.status()})`)
+    const routesBody = await routesResponse.json()
+    const routes = routesBody.routes ?? []
+    assert(Array.isArray(routes) && routes.length > 0, 'gateway route catalog returns route definitions')
+    assert(routes.some((route) => route.name === 'gateway-websocket'), 'gateway route catalog includes the websocket route')
+    assert(routes.some((route) => route.name === 'workspace-tasks' && route.timeout_ms >= 1), 'gateway route catalog exposes route timeouts')
+
+    const servicesResponse = await page.request.get(`${API_URL}/gateway/services`)
+    assert(servicesResponse.status() === 200, `gateway service registry returns 200 (actual: ${servicesResponse.status()})`)
+    const servicesBody = await servicesResponse.json()
+    const services = servicesBody.services ?? []
+    assert(Array.isArray(services) && services.length === 5, 'gateway service registry returns the five downstream services')
+    assert(
+      services.some((service) => service.name === 'im-service' && service.supports_websocket === true),
+      'gateway service registry marks websocket-capable services',
+    )
+    assert(
+      services.some((service) => service.name === 'user-service' && service.circuit_breaker?.state),
+      'gateway service registry exposes circuit breaker state',
+    )
+  } catch (error) {
+    assert(false, `gateway control plane failed: ${error.message}`)
   }
 }
 
@@ -91,6 +132,7 @@ async function testSeededLoginsAPI() {
       assert(response.status() === 200, `${account.username} login returns 200`)
       assert(body.code === 0, `${account.username} login returns code 0`)
       assert(Boolean(body.data?.token), `${account.username} login returns a token`)
+      assert(response.headers()['x-upstream-service'] === 'user-service', `${account.username} login is routed through user-service`)
     } catch (error) {
       assert(false, `${account.username} login failed: ${error.message}`)
     }
@@ -116,6 +158,7 @@ async function testChatAndGroupAPI() {
     })
     const privateBody = await privateResponse.json()
     assert(privateResponse.status() === 200 && privateBody.code === 0, 'private conversation can be created')
+    assert(privateResponse.headers()['x-upstream-service'] === 'im-service', 'private conversation create is routed through im-service')
 
     const privateConvID = privateBody.data.id
     const privateMessageResponse = await page.request.post(`${API_URL}/api/v1/conversations/${privateConvID}/messages`, {
@@ -160,6 +203,7 @@ async function testChatAndGroupAPI() {
     })
     const uploadBody = await uploadResponse.json()
     assert(uploadResponse.status() === 200 && uploadBody.code === 0, 'group file can be uploaded')
+    assert(uploadResponse.headers()['x-upstream-service'] === 'file-service', 'group file upload is routed through file-service')
 
     const filesResponse = await page.request.get(`${API_URL}/api/v1/conversations/${groupConvID}/files`, {
       headers: authHeaders(token),
@@ -249,6 +293,7 @@ async function run() {
   try {
     await setup()
     await testHealthEndpoint()
+    await testGatewayControlPlane()
     await testMetricsEndpoint()
     await testSeededLoginsAPI()
     await testChatAndGroupAPI()

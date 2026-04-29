@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	Services ServicesConfig
+	Gateway  GatewayConfig
 	Database DatabaseConfig
 	Redis    RedisConfig
 	File     FileConfig
@@ -36,6 +37,38 @@ type ServicesConfig struct {
 	FileURL       string
 	SearchURL     string
 	WorkspaceURL  string
+}
+
+type GatewayConfig struct {
+	HealthTimeoutMS int                          `mapstructure:"healthTimeoutMs"`
+	RateLimit       GatewayRateLimitConfig       `mapstructure:"rateLimit"`
+	Retry           GatewayRetryConfig           `mapstructure:"retry"`
+	CircuitBreaker  GatewayCircuitBreakerConfig  `mapstructure:"circuitBreaker"`
+	Timeouts        GatewayServiceTimeoutsConfig `mapstructure:"timeouts"`
+}
+
+type GatewayRateLimitConfig struct {
+	Requests int `mapstructure:"requests"`
+	WindowMS int `mapstructure:"windowMs"`
+}
+
+type GatewayRetryConfig struct {
+	MaxAttempts int `mapstructure:"maxAttempts"`
+	BackoffMS   int `mapstructure:"backoffMs"`
+}
+
+type GatewayCircuitBreakerConfig struct {
+	FailureThreshold int `mapstructure:"failureThreshold"`
+	CoolDownMS       int `mapstructure:"coolDownMs"`
+}
+
+type GatewayServiceTimeoutsConfig struct {
+	DefaultMS   int `mapstructure:"defaultMs"`
+	UserMS      int `mapstructure:"userMs"`
+	IMMS        int `mapstructure:"imMs"`
+	FileMS      int `mapstructure:"fileMs"`
+	SearchMS    int `mapstructure:"searchMs"`
+	WorkspaceMS int `mapstructure:"workspaceMs"`
 }
 
 type DatabaseConfig struct {
@@ -145,6 +178,19 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("services.fileURL", "http://localhost:8083")
 	viper.SetDefault("services.searchURL", "http://localhost:8084")
 	viper.SetDefault("services.workspaceURL", "http://localhost:8085")
+	viper.SetDefault("gateway.healthTimeoutMs", 3000)
+	viper.SetDefault("gateway.rateLimit.requests", 180)
+	viper.SetDefault("gateway.rateLimit.windowMs", 60000)
+	viper.SetDefault("gateway.retry.maxAttempts", 2)
+	viper.SetDefault("gateway.retry.backoffMs", 75)
+	viper.SetDefault("gateway.circuitBreaker.failureThreshold", 5)
+	viper.SetDefault("gateway.circuitBreaker.coolDownMs", 10000)
+	viper.SetDefault("gateway.timeouts.defaultMs", 8000)
+	viper.SetDefault("gateway.timeouts.userMs", 5000)
+	viper.SetDefault("gateway.timeouts.imMs", 15000)
+	viper.SetDefault("gateway.timeouts.fileMs", 20000)
+	viper.SetDefault("gateway.timeouts.searchMs", 5000)
+	viper.SetDefault("gateway.timeouts.workspaceMs", 8000)
 	viper.SetDefault("database.adminDBName", "postgres")
 	viper.SetDefault("database.maxOpenConns", 25)
 	viper.SetDefault("database.maxIdleConns", 5)

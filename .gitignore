@@ -46,3 +46,4 @@ coverage.html
 backend/configs/config.yaml
 backend/data/
 backend/uploads/
+.gocache/

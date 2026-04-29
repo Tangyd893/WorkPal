@@ -2,7 +2,7 @@
 
 中文说明 | [English](README.md)
 
-WorkPal 是一个基于 Go 与 React 的办公协作平台示例项目。当前版本的后端已经彻底收敛为微服务形态，不再保留单体兼容入口；前端通过 API Gateway 访问后端，后端各领域服务拥有各自的数据边界。
+WorkPal 是一个基于 Go 与 React 的办公协作平台示例项目。当前版本的后端已经彻底收敛为微服务形态，不再保留单体兼容入口；前端通过 API Gateway 访问后端，各领域服务拥有各自的数据边界。
 
 ## 项目能力
 
@@ -56,14 +56,33 @@ docker version
 
 | 服务 | 存储边界 | 关键职责 |
 | --- | --- | --- |
-| Gateway | 无状态 | 统一入口、转发、限流、聚合健康检查 |
+| Gateway | 无状态 | 统一入口、路由目录、服务目录、限流、重试、熔断、健康检查 |
 | User Service | `workpal_user` | 登录、用户、部门、员工档案、开发种子数据 |
 | IM Service | `workpal_im` | 私聊、群聊、消息、群公告、WebSocket |
 | File Service | `workpal_file` | 文件元数据、上传、分享、删除 |
 | Search Service | Bleve + Redis Streams | 消息搜索与索引消费 |
 | Workspace Service | `workpal_workspace` | 任务、日程 |
 
-网关 `GET /health` 会检查五个下游服务，因此它反映的是整套后端的真实状态，而不是只证明网关进程还活着。
+## Gateway 学习亮点
+
+Gateway 现在不只是一个转发入口，而是微服务入口层的学习样本。它已经具备：
+
+- `/gateway/routes`：查看显式路由目录
+- `/gateway/services`：查看下游服务目录与治理状态
+- `/health/live`：存活检查
+- `/health/ready`：就绪检查
+- `/health`：聚合健康检查
+- 请求 ID 注入
+- 限流
+- 服务级超时
+- 只对幂等读请求启用重试
+- 熔断器
+
+如果你熟悉 Spring Cloud Alibaba，可以把它理解为：
+
+- Gateway：入口层
+- 静态配置驱动的服务目录：轻量版 Nacos 视角
+- 限流 / 重试 / 熔断：轻量版 Sentinel 视角
 
 ## 快速开始
 
@@ -158,17 +177,23 @@ http://localhost:3000
 
 ## 快速自检
 
-### 网关健康检查
+### Gateway 管理面与健康检查
 
 ```powershell
+Invoke-RestMethod http://localhost:8080/health/live
+Invoke-RestMethod http://localhost:8080/health/ready
 Invoke-RestMethod http://localhost:8080/health
+Invoke-RestMethod http://localhost:8080/gateway/routes
+Invoke-RestMethod http://localhost:8080/gateway/services
 ```
 
 预期：
 
-- HTTP 状态码 `200`
-- `status` 为 `ok`
-- `components` 中包含五个下游服务
+- `live` 返回网关存活
+- `ready` 返回网关和下游服务可接流量
+- `health` 返回聚合健康状态
+- `routes` 返回显式路由目录
+- `services` 返回 5 个下游服务及其超时、重试、熔断信息
 
 ### 登录接口
 
@@ -189,6 +214,7 @@ Invoke-RestMethod `
 
 - `code` 为 `0`
 - `data.token` 存在
+- 响应头中可看到 `X-Upstream-Service: user-service`
 
 ### 前端登录
 
