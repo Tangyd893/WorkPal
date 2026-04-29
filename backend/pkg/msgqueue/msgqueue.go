@@ -3,6 +3,7 @@ package msgqueue
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // Message 消息结构
@@ -11,10 +12,20 @@ type Message struct {
 	Data  []byte
 }
 
+type Handler func([]byte) error
+
+type SubscribeOptions struct {
+	Consumer      string
+	MaxRetries    int64
+	DeadLetterKey string
+	ClaimMinIdle  time.Duration
+}
+
 // Interface 消息队列接口
 type Interface interface {
 	Publish(ctx context.Context, topic string, msg []byte) error
 	Subscribe(topic string, handler func([]byte)) error
+	SubscribeWithOptions(topic string, options SubscribeOptions, handler Handler) error
 	Close() error
 }
 
@@ -51,6 +62,12 @@ func (m *memQueue) Subscribe(topic string, handler func([]byte)) error {
 	return nil
 }
 
+func (m *memQueue) SubscribeWithOptions(topic string, options SubscribeOptions, handler Handler) error {
+	return m.Subscribe(topic, func(data []byte) {
+		_ = handler(data)
+	})
+}
+
 // Close 关闭
 func (m *memQueue) Close() error {
 	return nil
@@ -75,6 +92,13 @@ func Publish(ctx context.Context, topic string, msg []byte) error {
 func Subscribe(topic string, handler func([]byte)) error {
 	if globalQueue != nil {
 		return globalQueue.Subscribe(topic, handler)
+	}
+	return nil
+}
+
+func SubscribeWithOptions(topic string, options SubscribeOptions, handler Handler) error {
+	if globalQueue != nil {
+		return globalQueue.SubscribeWithOptions(topic, options, handler)
 	}
 	return nil
 }

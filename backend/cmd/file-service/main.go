@@ -4,12 +4,11 @@ import (
 	"log"
 
 	config "github.com/Tangyd893/WorkPal/backend/configs"
+	"github.com/Tangyd893/WorkPal/backend/internal/clients"
 	fileHandler "github.com/Tangyd893/WorkPal/backend/internal/file/handler"
 	fileModel "github.com/Tangyd893/WorkPal/backend/internal/file/model"
 	fileRepo "github.com/Tangyd893/WorkPal/backend/internal/file/repo"
 	fileSvc "github.com/Tangyd893/WorkPal/backend/internal/file/service"
-	imRepo "github.com/Tangyd893/WorkPal/backend/internal/im/repo"
-	imService "github.com/Tangyd893/WorkPal/backend/internal/im/service"
 	"github.com/Tangyd893/WorkPal/backend/internal/platform"
 )
 
@@ -33,8 +32,7 @@ func main() {
 	fileRepoInst := fileRepo.NewFileRepo(db)
 	fileService := fileSvc.NewFileService(fileRepoInst, store, cfg.File.MaxFileSizeMB)
 
-	convRepo := imRepo.NewConversationRepo(db)
-	convSvc := imService.NewConversationService(convRepo)
+	convSvc := clients.NewIMClient(cfg.Services.IMURL)
 	fileHdlr := fileHandler.NewFileHandler(fileService, convSvc)
 
 	r := platform.NewRouter(cfg, "file-service")

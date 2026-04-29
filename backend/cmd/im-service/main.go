@@ -62,6 +62,7 @@ func main() {
 	apiV1 := r.Group("/api/v1")
 	convHandler.RegisterRoutes(apiV1)
 	msgHandler.RegisterRoutes(apiV1)
+	convHandler.RegisterInternalRoutes(r.Group(""))
 	registerWebSocket(r, wsHandler)
 
 	if err := platform.RunHTTP("im-service", cfg.Services.IMPort, r, func() {

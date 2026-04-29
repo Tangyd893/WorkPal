@@ -1,4 +1,4 @@
-.PHONY: deps run run-server run-gateway run-user run-im run-file run-search test build build-services docker-up docker-down migrate lint clean
+.PHONY: deps run run-server run-gateway run-user run-im run-file run-search run-workspace test build build-services docker-up docker-down migrate lint clean
 
 # Go parameters
 GOCMD=go
@@ -35,6 +35,9 @@ run-file:
 run-search:
 	$(GOCMD) run ./cmd/search-service
 
+run-workspace:
+	$(GOCMD) run ./cmd/workspace-service
+
 build:
 	CGO_ENABLED=0 $(GOBUILD) -o $(BINARY) ./cmd/server
 
@@ -45,6 +48,7 @@ build-services:
 	CGO_ENABLED=0 $(GOBUILD) -o bin/im-service ./cmd/im-service
 	CGO_ENABLED=0 $(GOBUILD) -o bin/file-service ./cmd/file-service
 	CGO_ENABLED=0 $(GOBUILD) -o bin/search-service ./cmd/search-service
+	CGO_ENABLED=0 $(GOBUILD) -o bin/workspace-service ./cmd/workspace-service
 
 test:
 	$(GOTEST) -v -race -cover ./...
@@ -78,5 +82,6 @@ help:
 	@echo "  make run-im      - Run IM service"
 	@echo "  make run-file    - Run file service"
 	@echo "  make run-search  - Run search service"
+	@echo "  make run-workspace - Run workspace service"
 	@echo "  make test        - Run tests"
 	@echo "  make lint        - Run golangci-lint"

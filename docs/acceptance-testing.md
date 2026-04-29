@@ -1,80 +1,125 @@
-# WorkPal 验收说明
+# WorkPal Acceptance Testing Guide
 
-这份文档面向“按步骤启动并手动验收”的场景，和根目录 README 配套使用。
+This guide is for manually validating the current project after local startup.
 
-## 验收前确认
+## Before you start
 
-1. Docker 依赖已启动
-2. 后端 `http://localhost:8080/health` 返回 `200`
-3. 前端 `http://localhost:3000` 可访问
+Confirm all three conditions:
 
-## 验收账号
+1. Docker dependencies are running
+2. Backend health check returns `200`
+3. Frontend is reachable at `http://localhost:3000`
 
-| 角色 | 用户名 | 密码 | 建议用途 |
+## Acceptance accounts
+
+| Role | Username | Password | Suggested usage |
 |---|---|---|---|
-| 管理员 | `admin` | `admin123` | 验收全量工作台功能 |
-| 员工 | `emma.chen` | `workpal123` | 私聊 / 群聊成员 |
-| 员工 | `liam.wang` | `workpal123` | 私聊 / 群聊成员 |
-| 员工 | `sofia.zhao` | `workpal123` | 私聊 / 群聊成员 |
+| Admin | `admin` | `admin123` | full workspace walkthrough |
+| Employee | `emma.chen` | `workpal123` | direct chat and group member |
+| Employee | `liam.wang` | `workpal123` | engineering and directory checks |
+| Employee | `sofia.zhao` | `workpal123` | design and release-readiness checks |
 
-这些账号由后端开发模式在启动时自动确保存在。
+## Recommended manual walkthrough
 
-## 推荐验收路径
+### 1. Login page
 
-### 1. 登录页
+Validate:
 
-- 确认登录页能看到预置账号列表
-- 确认可切换 `English / 简体中文`
-- 确认可切换浅色 / 深色主题
+- seeded accounts are visible
+- language can switch between `English / 简体中文`
+- theme can switch between light and dark
 
-### 2. 总览页
+### 2. Overview
 
-- 登录后默认进入 `Overview / 总览`
-- 确认摘要卡片、重点事项、今日安排、共享文档区域都可见
+Validate:
 
-### 3. 偏好设置
+- overview loads without API errors
+- metric cards render
+- clicking cards or module buttons jumps to the correct workspace section
 
-打开 `Preferences / 偏好设置`，验证：
+### 3. Preferences
 
-- 语言切换
-- 深浅色主题切换
-- 消息提示音开关
-- 舒适 / 紧凑密度切换
+Open the preferences drawer and validate:
 
-### 4. 通讯录
+- language switch
+- theme switch
+- message sound toggle
+- comfortable and compact density switch
 
-- 进入 `Directory / 通讯录`
-- 确认 `admin`、`emma.chen`、`liam.wang`、`sofia.zhao` 可见
-- 确认能看到用户 ID、邮箱、电话、角色、部门、地点、关注点
+### 4. Directory
 
-### 5. 沟通模块
+Validate:
 
-- 进入 `Chat / 沟通`
-- 点击“新建会话”
-- 选择 `emma.chen` 发起私聊
-- 再选择多人创建群组
-- 验证消息发送、搜索、WebSocket 连接状态
+- seeded employees are visible
+- department filter works
+- fuzzy search works for title, phone, employee number, and department
 
-### 6. 任务 / 日程 / 文件
+Suggested checks:
 
-- 在 `Tasks / 任务` 中推进任务状态列
-- 在 `Schedule / 日程` 中确认会议面板可见
-- 在 `Files / 文件` 中确认共享文档、状态标签可见
+- choose `Engineering`
+- search `Platform Engineer`
+- confirm `liam.wang` remains visible
 
-## 当前实现边界
+### 5. Chat
 
-### 后端实时联调
+Validate direct chat:
 
-- 登录
-- 用户列表
-- 当前用户
-- 聊天 / 搜索 / WebSocket
+- create a direct chat with `emma.chen`
+- send a message
 
-### 前端预置演示
+Validate group chat:
 
-- 总览
-- 任务
-- 日程
-- 文件
+- create a group with `emma.chen` and `liam.wang`
+- send a group message
+- edit the group announcement
+- upload a group file
 
-这是当前版本的有意设计：先保证“办公协作平台”的产品完整性和可验收性，再逐步把这些模块后端化。
+### 6. Tasks
+
+Validate:
+
+- create a task
+- move it across columns
+- share it
+- delete it
+
+### 7. Schedule
+
+Validate:
+
+- create an event
+- share it
+- delete it
+
+### 8. Files
+
+Validate:
+
+- upload a personal file
+- open it
+- share it
+- delete it
+
+## Automated smoke check
+
+With backend and frontend already running:
+
+```powershell
+cd frontend
+npx playwright install chromium
+node ..\testing\e2e\playwright.mjs
+```
+
+The smoke test currently covers:
+
+- health and metrics endpoints
+- seeded login API
+- direct and group chat API flows
+- group announcement and group file API flows
+- frontend login
+- overview navigation
+- directory filter and search
+- task creation
+- schedule creation
+- file upload
+- direct chat creation and send

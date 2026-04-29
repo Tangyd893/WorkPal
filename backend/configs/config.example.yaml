@@ -10,10 +10,12 @@ services:
   imPort: 8082
   filePort: 8083
   searchPort: 8084
+  workspacePort: 8085
   userURL: "http://localhost:8081"
   imURL: "http://localhost:8082"
   fileURL: "http://localhost:8083"
   searchURL: "http://localhost:8084"
+  workspaceURL: "http://localhost:8085"
 
 database:
   host: "localhost"

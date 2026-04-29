@@ -7,7 +7,7 @@ import OverviewPanel from '../components/workspace/OverviewPanel'
 import SchedulePanel from '../components/workspace/SchedulePanel'
 import SettingsDrawer from '../components/workspace/SettingsDrawer'
 import TasksPanel from '../components/workspace/TasksPanel'
-import { buildDocuments, buildSchedule, buildSeedTasks } from '../data/workspace'
+import { buildDocuments } from '../data/workspace'
 import { useAuthStore } from '../hooks/useAuthStore'
 import { usePreferencesStore } from '../hooks/usePreferencesStore'
 import { useI18n } from '../i18n'
@@ -37,37 +37,6 @@ const nextTaskStatus: Record<TaskStatus, TaskStatus> = {
 
 function isWorkspaceSection(value: string | undefined): value is WorkspaceSection {
   return sectionOrder.includes(value as WorkspaceSection)
-}
-
-function createClientID(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function mergeLocalizedTasks(currentTasks: WorkspaceTask[], localizedTasks: WorkspaceTask[]): WorkspaceTask[] {
-  const currentByID = new Map(currentTasks.map((task) => [task.id, task]))
-  const customTasks = currentTasks.filter((task) => task.source === 'custom')
-
-  return [
-    ...localizedTasks.map((task) => ({
-      ...task,
-      status: currentByID.get(task.id)?.status ?? task.status,
-      sharedCount: currentByID.get(task.id)?.sharedCount ?? task.sharedCount,
-    })),
-    ...customTasks,
-  ]
-}
-
-function mergeLocalizedSchedule(currentEvents: ScheduleEvent[], localizedEvents: ScheduleEvent[]): ScheduleEvent[] {
-  const currentByID = new Map(currentEvents.map((event) => [event.id, event]))
-  const customEvents = currentEvents.filter((event) => event.source === 'custom')
-
-  return [
-    ...localizedEvents.map((event) => ({
-      ...event,
-      sharedCount: currentByID.get(event.id)?.sharedCount ?? event.sharedCount,
-    })),
-    ...customEvents,
-  ]
 }
 
 function mapUploadedFileToDocument(
@@ -123,8 +92,8 @@ export default function WorkspacePage() {
   const [teamMembers, setTeamMembers] = useState<WorkspaceUser[]>([])
   const [directoryUsers, setDirectoryUsers] = useState<WorkspaceUser[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
-  const [tasks, setTasks] = useState<WorkspaceTask[]>(() => buildSeedTasks(locale))
-  const [schedule, setSchedule] = useState<ScheduleEvent[]>(() => buildSchedule(locale))
+  const [tasks, setTasks] = useState<WorkspaceTask[]>([])
+  const [schedule, setSchedule] = useState<ScheduleEvent[]>([])
   const [seedDocuments, setSeedDocuments] = useState<SharedDocument[]>(() => buildDocuments(locale))
   const [uploadedFiles, setUploadedFiles] = useState<ConversationFile[]>([])
   const [uploadShareCounts, setUploadShareCounts] = useState<Record<number, number>>({})
@@ -133,8 +102,6 @@ export default function WorkspacePage() {
   const activeSection = isWorkspaceSection(section) ? section : null
 
   useEffect(() => {
-    setTasks((currentTasks) => mergeLocalizedTasks(currentTasks, buildSeedTasks(locale)))
-    setSchedule((currentEvents) => mergeLocalizedSchedule(currentEvents, buildSchedule(locale)))
     setSeedDocuments(buildDocuments(locale))
   }, [locale])
 
@@ -146,11 +113,13 @@ export default function WorkspacePage() {
       setLoadError('')
 
       try {
-        const [me, users, departmentList, files] = await Promise.all([
+        const [me, users, departmentList, files, taskList, eventList] = await Promise.all([
           workpalApi.getMe(),
           workpalApi.listUsers(),
           workpalApi.listDepartments(),
           workpalApi.listUserFiles(),
+          workpalApi.listTasks(),
+          workpalApi.listSchedule(),
         ])
         if (disposed) {
           return
@@ -162,6 +131,8 @@ export default function WorkspacePage() {
         setDirectoryUsers(sortedUsers)
         setDepartments(departmentList)
         setUploadedFiles(files)
+        setTasks(taskList)
+        setSchedule(eventList)
       } catch (error) {
         if (disposed) {
           return
@@ -274,54 +245,51 @@ export default function WorkspacePage() {
     setActionError(message)
   }
 
-  const handleAdvanceTask = (taskID: string) => {
-    setTasks((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === taskID
-          ? {
-              ...task,
-              status: nextTaskStatus[task.status],
-            }
-          : task,
-      ),
-    )
+  const replaceTask = (updatedTask: WorkspaceTask) => {
+    setTasks((currentTasks) => currentTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
   }
 
-  const handleResetTask = (taskID: string) => {
-    setTasks((currentTasks) =>
-      currentTasks.map((task) =>
-        task.id === taskID
-          ? {
-              ...task,
-              status: 'planned',
-            }
-          : task,
-      ),
-    )
+  const handleAdvanceTask = async (taskID: string) => {
+    const task = tasks.find((item) => item.id === taskID)
+    if (!task) {
+      return
+    }
+    try {
+      const updatedTask = await workpalApi.updateTaskStatus(taskID, nextTaskStatus[task.status])
+      replaceTask(updatedTask)
+      notify(updatedTask.title)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to update the task.')
+    }
   }
 
-  const handleAddTask = (draft: CreateTaskInput) => {
-    setTasks((currentTasks) => [
-      {
-        id: createClientID('task'),
-        title: draft.title,
-        summary: draft.summary,
-        project: draft.project,
-        ownerUsername: draft.ownerUsername,
-        teammates: draft.teammates,
-        dueDate: draft.dueDate,
-        priority: draft.priority,
-        status: 'planned',
-        sharedCount: 0,
-        source: 'custom',
-      },
-      ...currentTasks,
-    ])
-    notify(draft.title)
+  const handleResetTask = async (taskID: string) => {
+    try {
+      const updatedTask = await workpalApi.updateTaskStatus(taskID, 'planned')
+      replaceTask(updatedTask)
+      notify(updatedTask.title)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to reset the task.')
+    }
   }
 
-  const handleDeleteTask = (taskID: string) => {
-    setTasks((currentTasks) => currentTasks.filter((task) => task.id !== taskID))
+  const handleAddTask = async (draft: CreateTaskInput) => {
+    try {
+      const createdTask = await workpalApi.createTask(draft)
+      setTasks((currentTasks) => [createdTask, ...currentTasks])
+      notify(createdTask.title)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to create the task.')
+    }
+  }
+
+  const handleDeleteTask = async (taskID: string) => {
+    try {
+      await workpalApi.deleteTask(taskID)
+      setTasks((currentTasks) => currentTasks.filter((task) => task.id !== taskID))
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to delete the task.')
+    }
   }
 
   const handleShareTask = async (taskID: string) => {
@@ -336,33 +304,36 @@ export default function WorkspacePage() {
       return
     }
 
-    setTasks((currentTasks) =>
-      currentTasks.map((item) => (item.id === taskID ? { ...item, sharedCount: item.sharedCount + 1 } : item)),
-    )
-    notify(task.title)
+    try {
+      const updatedTask = await workpalApi.shareTask(taskID)
+      replaceTask(updatedTask)
+      notify(task.title)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to share the task.')
+    }
   }
 
-  const handleAddEvent = (draft: CreateScheduleInput) => {
-    setSchedule((currentEvents) => [
-      {
-        id: createClientID('event'),
-        title: draft.title,
-        detail: draft.detail,
-        ownerUsername: draft.ownerUsername,
-        startsAt: draft.startsAt,
-        durationMinutes: draft.durationMinutes,
-        attendees: draft.attendees,
-        room: draft.room,
-        sharedCount: 0,
-        source: 'custom',
-      },
-      ...currentEvents,
-    ])
-    notify(draft.title)
+  const replaceEvent = (updatedEvent: ScheduleEvent) => {
+    setSchedule((currentEvents) => currentEvents.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)))
   }
 
-  const handleDeleteEvent = (eventID: string) => {
-    setSchedule((currentEvents) => currentEvents.filter((event) => event.id !== eventID))
+  const handleAddEvent = async (draft: CreateScheduleInput) => {
+    try {
+      const createdEvent = await workpalApi.createScheduleEvent(draft)
+      setSchedule((currentEvents) => [createdEvent, ...currentEvents])
+      notify(createdEvent.title)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to create the schedule event.')
+    }
+  }
+
+  const handleDeleteEvent = async (eventID: string) => {
+    try {
+      await workpalApi.deleteScheduleEvent(eventID)
+      setSchedule((currentEvents) => currentEvents.filter((event) => event.id !== eventID))
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to delete the schedule event.')
+    }
   }
 
   const handleShareEvent = async (eventID: string) => {
@@ -377,10 +348,13 @@ export default function WorkspacePage() {
       return
     }
 
-    setSchedule((currentEvents) =>
-      currentEvents.map((item) => (item.id === eventID ? { ...item, sharedCount: item.sharedCount + 1 } : item)),
-    )
-    notify(event.title)
+    try {
+      const updatedEvent = await workpalApi.shareScheduleEvent(eventID)
+      replaceEvent(updatedEvent)
+      notify(event.title)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to share the schedule event.')
+    }
   }
 
   const handleUploadDocument = async (file: File) => {

@@ -45,6 +45,7 @@ docker version
 | IM Service | `http://localhost:8082` | 会话、消息、WebSocket |
 | File Service | `http://localhost:8083` | 个人文件和群文件 |
 | Search Service | `http://localhost:8084` | Bleve 搜索 API 和消息索引消费者 |
+| Workspace Service | `http://localhost:8085` | 后端持久化任务和日程 |
 | 健康检查 | `http://localhost:8080/health` | 网关健康检查端点 |
 | PostgreSQL | `localhost:5432` | `workpal / workpal123` |
 | Redis | `localhost:6379` | 默认无密码 |
@@ -53,11 +54,12 @@ docker version
 
 ## 快速开始
 
-### 1. 启动基础设施依赖
+### 1. 启动 Docker Compose 服务栈
 
 在仓库根目录执行：
 
 ```powershell
+docker compose -f docker/docker-compose.yaml build
 docker compose -f docker/docker-compose.yaml up -d
 docker compose -f docker/docker-compose.yaml ps
 ```
@@ -67,10 +69,17 @@ docker compose -f docker/docker-compose.yaml ps
 - `postgres` 状态为 `Up` 或 `healthy`
 - `redis` 状态为 `Up`
 - `minio` 状态为 `Up`
+- `gateway`、`user-service`、`im-service`、`file-service`、`search-service` 和 `workspace-service` 状态为 `Up`
+
+如果想从源码手动运行 Go 服务，可以只先启动基础设施：
+
+```powershell
+docker compose -f docker/docker-compose.yaml up -d postgres redis minio
+```
 
 ### 2. 启动后端微服务
 
-分别打开多个终端启动以下服务：
+如果已经启动完整 Docker Compose 服务栈，可以跳过本节。否则分别打开多个终端启动以下服务：
 
 ```powershell
 cd backend
@@ -94,6 +103,11 @@ go run ./cmd/search-service
 
 ```powershell
 cd backend
+go run ./cmd/workspace-service
+```
+
+```powershell
+cd backend
 go run ./cmd/gateway
 ```
 
@@ -105,6 +119,7 @@ go run ./cmd/gateway
 | `/api/v1/conversations*`、`/api/v1/messages*`、`/ws` | IM Service |
 | `/api/v1/files*`、`/api/v1/conversations/:id/files` | File Service |
 | `/api/v1/search*` | Search Service |
+| `/api/v1/tasks*`、`/api/v1/schedule*` | Workspace Service |
 
 为了兼容快速本地调试，保留了一体化后端启动方式：
 
@@ -119,7 +134,8 @@ go run ./cmd/server
 2. User Service 在非 `release` 模式下会自动确保部门、员工和验收账号等种子数据存在。
 3. IM Service 将消息写入 PostgreSQL，并向 Redis Streams 发布消息索引事件。
 4. Search Service 消费 Redis Streams 事件，并更新 Bleve 索引。
-5. 除非需要覆盖样例配置，否则不需要创建 `backend/configs/config.yaml`。
+5. Workspace Service 持久化过去只存在于前端本地演示状态的任务和日程。
+6. 除非需要覆盖样例配置，否则不需要创建 `backend/configs/config.yaml`。
 
 后端配置查找顺序：
 
@@ -274,17 +290,17 @@ Invoke-RestMethod `
 - 群公告
 - 群文件
 - 个人文件上传、列表、分享、删除
+- 任务创建、状态更新、分享、删除
+- 日程创建、分享、删除
 
 ### 当前仍是前端本地演示状态
 
 - 总览摘要组合
-- 任务看板条目
-- 日程条目
 - 文件模块中的种子知识卡片
 
 这意味着：
 
-- 任务和日程在 UI 中可用，但尚未持久化到后端
+- 任务和日程现在通过 Workspace Service 持久化
 - 通过文件服务上传的文件是真实后端数据
 - 总览模块会结合当前前端状态和后端加载的人员数据展示
 

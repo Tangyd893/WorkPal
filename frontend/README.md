@@ -1,27 +1,19 @@
 # WorkPal Frontend
 
-这是 WorkPal 的 React + Vite 前端。
+This is the React + Vite frontend for WorkPal.
 
-如果你要从零启动整套项目，请优先看仓库根目录的 [README.md](../README.md)。本文件主要说明前端自己的启动方式、代理关系和当前页面结构。
+If you want to boot the whole project, read the repo root [README.md](../README.md) first. This file focuses on frontend structure and learning points.
 
-## 环境要求
+## Frontend stack
 
-- Node.js 18+
-- npm
+- React 18
+- Vite
+- TypeScript
+- Zustand
+- Axios
+- Playwright for smoke testing
 
-## 启动前提
-
-前端默认依赖：
-
-- 本地后端运行在 `http://localhost:8080`
-- Vite dev server 运行在 `http://localhost:3000`
-
-代理规则定义在 [vite.config.ts](vite.config.ts)：
-
-- `/api/*` -> `http://localhost:8080`
-- `/ws` -> `ws://localhost:8080`
-
-## 启动前端
+## Start the frontend
 
 ```powershell
 cd frontend
@@ -29,15 +21,24 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-打开：
+Open:
 
 ```text
 http://localhost:3000
 ```
 
-## 当前页面结构
+## Proxy behavior
 
-登录后会进入多板块工作台，而不是单一聊天页：
+Defined in [vite.config.ts](vite.config.ts):
+
+- `/api/*` -> `http://localhost:8080`
+- `/ws` -> `ws://localhost:8080`
+
+That means the frontend expects the backend to be running on `http://localhost:8080`.
+
+## Main pages and modules
+
+After login, the app routes into a workspace shell:
 
 - `Overview / 总览`
 - `Chat / 沟通`
@@ -46,61 +47,75 @@ http://localhost:3000
 - `Files / 文件`
 - `Directory / 通讯录`
 
-同时支持以下偏好设置：
+## User-facing capabilities
 
-- `English / 简体中文`
-- 浅色 / 深色主题
-- 消息提示音开关
-- 舒适 / 紧凑密度
+- seeded acceptance accounts shown on the login page
+- language switch: `English / 简体中文`
+- light and dark theme
+- message sound toggle
+- compact density toggle
+- direct chat and group chat
+- group announcement and group files
+- directory search by name, phone, title, employee number, and department
+- task CRUD and share actions
+- schedule CRUD and share actions
+- file upload, open, share, and delete actions
 
-## 预置验收账号
+## Source layout
 
-这些账号由后端开发模式自动确保存在，前端登录页也会直接展示：
+Key frontend folders:
 
-| 用户名 | 密码 |
-|---|---|
-| `admin` | `admin123` |
-| `emma.chen` | `workpal123` |
-| `liam.wang` | `workpal123` |
-| `sofia.zhao` | `workpal123` |
+- `src/pages`: route-level pages such as `LoginPage` and `WorkspacePage`
+- `src/components`: module UIs for workspace and chat
+- `src/api`: backend request wrappers
+- `src/hooks`: Zustand-backed auth, preferences, and chat state logic
+- `src/types`: shared frontend types
+- `src/data`: seeded display data used by the overview and knowledge cards
+- `src/utils`: storage, clipboard, and notification helpers
+- `src/styles`: global CSS
 
-## 哪些模块是后端联调，哪些是前端演示
+## Backend-backed vs seeded UI data
 
-### 直接依赖后端
+### Backend-backed
 
-- 登录
-- 当前用户 / 用户列表
-- 私聊 / 群聊
-- 消息发送
-- 消息搜索
-- WebSocket 实时状态
+- login
+- current user
+- users and departments
+- direct and group chat
+- message history and search
+- group announcement
+- group files
+- personal file uploads
+- tasks
+- schedule
 
-### 当前为前端预置协作演示
+### Seeded or display-only data
 
-- 总览摘要
-- 任务看板
-- 日程面板
-- 文件与知识面板
+- overview summaries
+- seeded knowledge cards in the files module
 
-这些模块的存在是为了让项目在验收时具备更完整的办公协作平台形态，不再只有沟通板块。
+So the workspace shell mixes real backend data with a few curated demo cards to make the product surface more complete during acceptance.
 
-## 常用脚本
+## State management notes
+
+- auth state lives in Zustand and persists in local storage
+- UI preferences also persist in local storage
+- chat runtime state is coordinated through `useChatController`
+- most module actions are routed through `workpalApi`
+
+## Tests
+
+Unit and build checks:
 
 ```powershell
 cd frontend
-npm run dev -- --host 127.0.0.1
 npm test
 npm run build
 ```
 
-## E2E 冒烟
-
-要求前后端都已启动：
+End-to-end smoke:
 
 ```powershell
-cd frontend
 npx playwright install chromium
 node ..\testing\e2e\playwright.mjs
 ```
-
-这个脚本会验证预置账号登录、工作台导航、语言切换、通讯录和聊天入口。

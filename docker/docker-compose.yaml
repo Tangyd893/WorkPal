@@ -54,6 +54,128 @@ services:
       retries: 5
     restart: unless-stopped
 
+  user-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: user-service
+    container_name: workpal-user-service
+    environment: &backend_env
+      CONFIG_PATH: /app/configs/config.example.yaml
+      SERVER_MODE: debug
+      DATABASE_HOST: postgres
+      REDIS_HOST: redis
+      FILE_STORETYPE: minio
+      FILE_MINIO_ENDPOINT: minio:9000
+      SERVICES_USERURL: http://user-service:8081
+      SERVICES_IMURL: http://im-service:8082
+      SERVICES_FILEURL: http://file-service:8083
+      SERVICES_SEARCHURL: http://search-service:8084
+      SERVICES_WORKSPACEURL: http://workspace-service:8085
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+
+  im-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: im-service
+    container_name: workpal-im-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+
+  file-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: file-service
+    container_name: workpal-file-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      im-service:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    restart: unless-stopped
+
+  search-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: search-service
+    container_name: workpal-search-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      im-service:
+        condition: service_started
+    ports:
+      - "8084:8084"
+    volumes:
+      - search_data:/app/data/search
+    restart: unless-stopped
+
+  workspace-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: workspace-service
+    container_name: workpal-workspace-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: gateway
+    container_name: workpal-gateway
+    environment: *backend_env
+    depends_on:
+      user-service:
+        condition: service_started
+      im-service:
+        condition: service_started
+      file-service:
+        condition: service_started
+      search-service:
+        condition: service_started
+      workspace-service:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   minio_data:
+  search_data:

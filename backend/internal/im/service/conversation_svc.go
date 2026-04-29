@@ -122,6 +122,18 @@ func (s *ConversationService) ListByUser(ctx context.Context, userID int64, offs
 	return convs, total, err
 }
 
+func (s *ConversationService) ListUserConversationIDs(ctx context.Context, userID int64) ([]int64, error) {
+	convs, _, err := s.ListByUser(ctx, userID, 0, 1000)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(convs))
+	for _, conv := range convs {
+		ids = append(ids, conv.ID)
+	}
+	return ids, nil
+}
+
 func (s *ConversationService) Update(ctx context.Context, conv *model.Conversation) error {
 	conv.UpdatedAt = time.Now()
 	return s.convRepo.Update(ctx, conv)

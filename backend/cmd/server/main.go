@@ -27,6 +27,10 @@ import (
 	"github.com/Tangyd893/WorkPal/backend/internal/user/model"
 	userRepo "github.com/Tangyd893/WorkPal/backend/internal/user/repo"
 	userService "github.com/Tangyd893/WorkPal/backend/internal/user/service"
+	workspaceHandler "github.com/Tangyd893/WorkPal/backend/internal/workspace/handler"
+	workspaceModel "github.com/Tangyd893/WorkPal/backend/internal/workspace/model"
+	workspaceRepo "github.com/Tangyd893/WorkPal/backend/internal/workspace/repo"
+	workspaceService "github.com/Tangyd893/WorkPal/backend/internal/workspace/service"
 	"github.com/Tangyd893/WorkPal/backend/pkg/auth"
 	"github.com/Tangyd893/WorkPal/backend/pkg/cache"
 	"github.com/Tangyd893/WorkPal/backend/pkg/msgqueue"
@@ -198,6 +202,11 @@ func main() {
 		searchHdlr = searchHandler.NewSearchHandler(searchService, convSvc)
 	}
 
+	// Workspace 模块
+	workspaceRepoInst := workspaceRepo.NewRepo(db)
+	workspaceSvc := workspaceService.NewService(workspaceRepoInst)
+	workspaceHdlr := workspaceHandler.NewHandler(workspaceSvc)
+
 	// 8. 设置 Gin 模式
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -263,6 +272,7 @@ func main() {
 	convHandler.RegisterRoutes(imGroup)
 	msgHandler.RegisterRoutes(imGroup)
 	fHdlr.RegisterRoutes(imGroup)
+	workspaceHdlr.RegisterRoutes(imGroup)
 
 	// 搜索路由
 	if searchHdlr != nil {
@@ -343,6 +353,8 @@ func autoMigrate(db *gorm.DB) error {
 		&imModel.Message{},
 		&imModel.MessageRead{},
 		&fileModel.File{},
+		&workspaceModel.Task{},
+		&workspaceModel.ScheduleEvent{},
 	)
 }
 

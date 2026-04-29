@@ -45,6 +45,7 @@ Only continue if the output contains both `Client` and `Server`.
 | IM Service | `http://localhost:8082` | conversations, messages, WebSocket |
 | File Service | `http://localhost:8083` | personal files and group files |
 | Search Service | `http://localhost:8084` | Bleve search API and message-index consumer |
+| Workspace Service | `http://localhost:8085` | backend-backed tasks and schedule |
 | Health check | `http://localhost:8080/health` | gateway health endpoint |
 | PostgreSQL | `localhost:5432` | `workpal / workpal123` |
 | Redis | `localhost:6379` | no password by default |
@@ -53,11 +54,12 @@ Only continue if the output contains both `Client` and `Server`.
 
 ## Quick Start
 
-### 1. Start infrastructure dependencies
+### 1. Start the Docker Compose stack
 
 From the repo root:
 
 ```powershell
+docker compose -f docker/docker-compose.yaml build
 docker compose -f docker/docker-compose.yaml up -d
 docker compose -f docker/docker-compose.yaml ps
 ```
@@ -67,10 +69,17 @@ Expected result:
 - `postgres` is `Up` or `healthy`
 - `redis` is `Up`
 - `minio` is `Up`
+- `gateway`, `user-service`, `im-service`, `file-service`, `search-service`, and `workspace-service` are `Up`
+
+If you prefer running Go services manually from source, start only infrastructure first:
+
+```powershell
+docker compose -f docker/docker-compose.yaml up -d postgres redis minio
+```
 
 ### 2. Start the backend microservices
 
-Open separate terminals for the services below:
+Skip this section if you already started the full Docker Compose stack. Otherwise, open separate terminals for the services below:
 
 ```powershell
 cd backend
@@ -94,6 +103,11 @@ go run ./cmd/search-service
 
 ```powershell
 cd backend
+go run ./cmd/workspace-service
+```
+
+```powershell
+cd backend
 go run ./cmd/gateway
 ```
 
@@ -105,6 +119,7 @@ The gateway remains the only backend URL that the frontend needs to know. It rou
 | `/api/v1/conversations*`, `/api/v1/messages*`, `/ws` | IM Service |
 | `/api/v1/files*`, `/api/v1/conversations/:id/files` | File Service |
 | `/api/v1/search*` | Search Service |
+| `/api/v1/tasks*`, `/api/v1/schedule*` | Workspace Service |
 
 For quick local compatibility, the legacy all-in-one server is still available:
 
@@ -119,7 +134,8 @@ Important startup behavior in microservice mode:
 2. The User Service ensures the seeded departments, employees, and acceptance accounts exist in non-`release` mode.
 3. The IM Service writes messages to PostgreSQL and publishes message index events to Redis Streams.
 4. The Search Service consumes those Redis Streams events and updates the Bleve index.
-5. You do **not** need to create `backend/configs/config.yaml` unless you want to override the sample config.
+5. The Workspace Service persists tasks and schedule events that used to be frontend-local demo state.
+6. You do **not** need to create `backend/configs/config.yaml` unless you want to override the sample config.
 
 Backend config lookup order:
 
@@ -274,17 +290,17 @@ This is important for debugging expectations.
 - group announcement
 - group files
 - personal file upload, list, share, delete
+- task create, status update, share, delete
+- schedule event create, share, delete
 
 ### Frontend-local demo state right now
 
 - overview summary composition
-- task board items
-- schedule items
 - seeded knowledge cards in the files module
 
 That means:
 
-- tasks and schedule are functional in the UI, but are not persisted to the backend yet
+- tasks and schedule are now persisted through Workspace Service
 - files uploaded through the file service are real backend data
 - the overview module reflects current frontend state and backend-loaded people data
 

@@ -7,7 +7,16 @@ import type {
   PageData,
   SearchResult,
 } from '../types/chat'
-import type { ConversationFile, Department, WorkspaceUser } from '../types/workspace'
+import type {
+  ConversationFile,
+  CreateScheduleInput,
+  CreateTaskInput,
+  Department,
+  ScheduleEvent,
+  TaskStatus,
+  WorkspaceTask,
+  WorkspaceUser,
+} from '../types/workspace'
 
 interface LoginPayload {
   username: string
@@ -144,5 +153,41 @@ export const workpalApi = {
     return apiPost<{ file_id: number; name: string; download_path: string; share_text: string }, undefined>(
       `/files/${fileID}/share`,
     )
+  },
+
+  listTasks() {
+    return apiGet<WorkspaceTask[]>('/tasks')
+  },
+
+  createTask(payload: CreateTaskInput) {
+    return apiPost<WorkspaceTask, CreateTaskInput>('/tasks', payload)
+  },
+
+  updateTaskStatus(taskID: string, status: TaskStatus) {
+    return apiPut<WorkspaceTask, { status: TaskStatus }>(`/tasks/${taskID}/status`, { status })
+  },
+
+  deleteTask(taskID: string) {
+    return apiDelete<null>(`/tasks/${taskID}`)
+  },
+
+  shareTask(taskID: string) {
+    return apiPost<WorkspaceTask, undefined>(`/tasks/${taskID}/share`)
+  },
+
+  listSchedule() {
+    return apiGet<ScheduleEvent[]>('/schedule')
+  },
+
+  createScheduleEvent(payload: CreateScheduleInput) {
+    return apiPost<ScheduleEvent, CreateScheduleInput>('/schedule', payload)
+  },
+
+  deleteScheduleEvent(eventID: string) {
+    return apiDelete<null>(`/schedule/${eventID}`)
+  },
+
+  shareScheduleEvent(eventID: string) {
+    return apiPost<ScheduleEvent, undefined>(`/schedule/${eventID}/share`)
   },
 }

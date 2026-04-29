@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/clients"
 	"github.com/Tangyd893/WorkPal/backend/internal/events"
 	imModel "github.com/Tangyd893/WorkPal/backend/internal/im/model"
-	imRepo "github.com/Tangyd893/WorkPal/backend/internal/im/repo"
-	imService "github.com/Tangyd893/WorkPal/backend/internal/im/service"
 	"github.com/Tangyd893/WorkPal/backend/internal/platform"
 	searchHandler "github.com/Tangyd893/WorkPal/backend/internal/search/handler"
 	searchSvc "github.com/Tangyd893/WorkPal/backend/internal/search/service"
@@ -20,7 +19,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	db, sqlDB, err := platform.OpenDB(cfg)
+	_, sqlDB, err := platform.OpenDB(cfg)
 	if err != nil {
 		log.Fatalf("open database: %v", err)
 	}
@@ -42,8 +41,7 @@ func main() {
 	msgqueue.Init(queue)
 	subscribeMessageEvents(queue, searchService)
 
-	convRepo := imRepo.NewConversationRepo(db)
-	convSvc := imService.NewConversationService(convRepo)
+	convSvc := clients.NewIMClient(cfg.Services.IMURL)
 	searchHdlr := searchHandler.NewSearchHandler(searchService, convSvc)
 
 	r := platform.NewRouter(cfg, "search-service")
@@ -57,28 +55,36 @@ func main() {
 }
 
 func subscribeMessageEvents(queue msgqueue.Interface, searchService *searchSvc.SearchService) {
-	if err := queue.Subscribe(events.TopicMessageUpserted, func(data []byte) {
+	if err := queue.SubscribeWithOptions(events.TopicMessageUpserted, msgqueue.SubscribeOptions{
+		Consumer:      "search-message-upsert-indexer",
+		MaxRetries:    5,
+		DeadLetterKey: "workpal:streams:messages:dead",
+	}, func(data []byte) error {
 		var msg imModel.Message
 		if err := json.Unmarshal(data, &msg); err != nil {
-			log.Printf("decode message upsert event: %v", err)
-			return
+			return err
 		}
 		if err := searchService.IndexMessage(&msg); err != nil {
-			log.Printf("index message %d: %v", msg.ID, err)
+			return err
 		}
+		return nil
 	}); err != nil {
 		log.Printf("subscribe message upsert events: %v", err)
 	}
 
-	if err := queue.Subscribe(events.TopicMessageDeleted, func(data []byte) {
+	if err := queue.SubscribeWithOptions(events.TopicMessageDeleted, msgqueue.SubscribeOptions{
+		Consumer:      "search-message-delete-indexer",
+		MaxRetries:    5,
+		DeadLetterKey: "workpal:streams:messages:dead",
+	}, func(data []byte) error {
 		var event events.MessageDeletedEvent
 		if err := json.Unmarshal(data, &event); err != nil {
-			log.Printf("decode message delete event: %v", err)
-			return
+			return err
 		}
 		if err := searchService.DeleteMessage(event.ID); err != nil {
-			log.Printf("delete message %d from search index: %v", event.ID, err)
+			return err
 		}
+		return nil
 	}); err != nil {
 		log.Printf("subscribe message delete events: %v", err)
 	}

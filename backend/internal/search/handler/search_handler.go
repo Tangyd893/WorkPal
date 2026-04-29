@@ -1,22 +1,27 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
-	"github.com/Tangyd893/WorkPal/backend/internal/im/service"
 	searchSvc "github.com/Tangyd893/WorkPal/backend/internal/search/service"
 	"github.com/gin-gonic/gin"
 )
 
 type SearchHandler struct {
 	searchSvc *searchSvc.SearchService
-	convSvc   *service.ConversationService
+	convSvc   ConversationAccess
 }
 
-func NewSearchHandler(searchSvc *searchSvc.SearchService, convSvc *service.ConversationService) *SearchHandler {
+type ConversationAccess interface {
+	IsMember(ctx context.Context, convID, userID int64) (bool, error)
+	ListUserConversationIDs(ctx context.Context, userID int64) ([]int64, error)
+}
+
+func NewSearchHandler(searchSvc *searchSvc.SearchService, convSvc ConversationAccess) *SearchHandler {
 	return &SearchHandler{
 		searchSvc: searchSvc,
 		convSvc:   convSvc,
@@ -63,14 +68,10 @@ func (h *SearchHandler) Search(c *gin.Context) {
 	}
 
 	// 全局搜索只在当前用户已加入的会话范围内执行，避免跨会话泄露。
-	convs, _, err := h.convSvc.ListByUser(c.Request.Context(), userID, 0, 1000)
+	convIDs, err := h.convSvc.ListUserConversationIDs(c.Request.Context(), userID)
 	if err != nil {
 		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
 		return
-	}
-	convIDs := make([]int64, 0, len(convs))
-	for _, conv := range convs {
-		convIDs = append(convIDs, conv.ID)
 	}
 	result, err := h.searchSvc.SearchInConvs(c.Request.Context(), convIDs, query, page, pageSize)
 	if err != nil {
