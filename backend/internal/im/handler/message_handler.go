@@ -8,6 +8,7 @@ import (
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
+	"github.com/Tangyd893/WorkPal/backend/internal/events"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/service"
 	imWS "github.com/Tangyd893/WorkPal/backend/internal/im/ws"
@@ -128,6 +129,7 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	if h.searchSvc != nil {
 		_ = h.searchSvc.IndexMessage(msg)
 	}
+	_ = events.PublishMessageUpserted(c.Request.Context(), msg)
 
 	response.Success(c, msg)
 }
@@ -158,6 +160,7 @@ func (h *MessageHandler) Edit(c *gin.Context) {
 	if h.searchSvc != nil {
 		_ = h.searchSvc.IndexMessage(msg)
 	}
+	_ = events.PublishMessageUpserted(c.Request.Context(), msg)
 	response.Success(c, msg)
 }
 
@@ -178,6 +181,7 @@ func (h *MessageHandler) Delete(c *gin.Context) {
 	if h.searchSvc != nil {
 		_ = h.searchSvc.DeleteMessage(msgID)
 	}
+	_ = events.PublishMessageDeleted(c.Request.Context(), msgID)
 	response.Success(c, nil)
 }
 

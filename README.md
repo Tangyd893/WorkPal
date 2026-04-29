@@ -1,6 +1,8 @@
 # WorkPal
 
-WorkPal is a Go + React office collaboration demo. The current version is no longer just a chat shell. It now includes:
+[中文说明](README-cn.md) | English
+
+WorkPal is a Go microservices + React office collaboration demo. The current version is no longer just a chat shell. It now includes:
 
 - seeded admin and employee accounts for acceptance
 - bilingual UI: `English / 简体中文`
@@ -13,10 +15,10 @@ This README is written for the current code in this repository and is intended t
 
 ## Stack
 
-- Backend: Go, Gin, GORM, PostgreSQL, Redis, Bleve
+- Backend: Go microservices, Gin, GORM, PostgreSQL, Redis Streams, Bleve
 - Frontend: React, Vite, Zustand
 - File storage: local storage by default, MinIO supported
-- Realtime: WebSocket
+- Realtime: WebSocket through the IM service and API gateway
 
 ## Prerequisites
 
@@ -38,8 +40,12 @@ Only continue if the output contains both `Client` and `Server`.
 | Service | URL | Notes |
 |---|---|---|
 | Frontend | `http://localhost:3000` | Vite dev server |
-| Backend | `http://localhost:8080` | Gin API |
-| Health check | `http://localhost:8080/health` | checks PostgreSQL and Redis |
+| API Gateway | `http://localhost:8080` | single frontend entry for HTTP and WebSocket |
+| User Service | `http://localhost:8081` | auth, users, departments |
+| IM Service | `http://localhost:8082` | conversations, messages, WebSocket |
+| File Service | `http://localhost:8083` | personal files and group files |
+| Search Service | `http://localhost:8084` | Bleve search API and message-index consumer |
+| Health check | `http://localhost:8080/health` | gateway health endpoint |
 | PostgreSQL | `localhost:5432` | `workpal / workpal123` |
 | Redis | `localhost:6379` | no password by default |
 | MinIO API | `http://localhost:9000` | object storage |
@@ -62,20 +68,58 @@ Expected result:
 - `redis` is `Up`
 - `minio` is `Up`
 
-### 2. Start the backend
+### 2. Start the backend microservices
 
-Open a new terminal:
+Open separate terminals for the services below:
+
+```powershell
+cd backend
+go run ./cmd/user-service
+```
+
+```powershell
+cd backend
+go run ./cmd/im-service
+```
+
+```powershell
+cd backend
+go run ./cmd/file-service
+```
+
+```powershell
+cd backend
+go run ./cmd/search-service
+```
+
+```powershell
+cd backend
+go run ./cmd/gateway
+```
+
+The gateway remains the only backend URL that the frontend needs to know. It routes requests to the domain services:
+
+| Gateway path | Upstream service |
+|---|---|
+| `/api/v1/auth/*`, `/api/v1/users*`, `/api/v1/departments*` | User Service |
+| `/api/v1/conversations*`, `/api/v1/messages*`, `/ws` | IM Service |
+| `/api/v1/files*`, `/api/v1/conversations/:id/files` | File Service |
+| `/api/v1/search*` | Search Service |
+
+For quick local compatibility, the legacy all-in-one server is still available:
 
 ```powershell
 cd backend
 go run ./cmd/server
 ```
 
-Important startup behavior:
+Important startup behavior in microservice mode:
 
-1. The backend runs `AutoMigrate` on startup.
-2. In non-`release` mode it automatically ensures the seeded departments, employees, and acceptance accounts exist.
-3. You do **not** need to create `backend/configs/config.yaml` unless you want to override the sample config.
+1. Each service migrates the tables it owns on startup.
+2. The User Service ensures the seeded departments, employees, and acceptance accounts exist in non-`release` mode.
+3. The IM Service writes messages to PostgreSQL and publishes message index events to Redis Streams.
+4. The Search Service consumes those Redis Streams events and updates the Bleve index.
+5. You do **not** need to create `backend/configs/config.yaml` unless you want to override the sample config.
 
 Backend config lookup order:
 
@@ -117,8 +161,24 @@ http://localhost:3000
 
 Frontend proxy rules:
 
-- `/api/*` -> `http://localhost:8080`
-- `/ws` -> `ws://localhost:8080`
+- `/api/*` -> `http://localhost:8080` -> API Gateway -> target service
+- `/ws` -> `ws://localhost:8080` -> API Gateway -> IM Service
+
+## Microservice Message Flow
+
+Chat messages use HTTP for persistence and Redis Streams for cross-service indexing:
+
+```text
+Frontend
+  -> API Gateway
+  -> IM Service
+  -> PostgreSQL
+  -> Redis Streams: message.upserted / message.deleted
+  -> Search Service
+  -> Bleve index
+```
+
+This keeps message sending reliable even if search indexing is temporarily unavailable. The source of truth remains PostgreSQL, while Redis Streams decouples IM writes from search indexing.
 
 ## Acceptance Accounts
 
@@ -235,6 +295,7 @@ That means:
 ```powershell
 cd backend
 go test ./...
+make build-services
 
 cd ..\frontend
 npm test
@@ -278,6 +339,7 @@ docker compose -f docker/docker-compose.yaml down
 
 ## Related Docs
 
+- [README-cn.md](README-cn.md)
 - [frontend/README.md](frontend/README.md)
 - [docs/acceptance-testing.md](docs/acceptance-testing.md)
 - [docs/项目技术特点学习笔记.md](docs/项目技术特点学习笔记.md)

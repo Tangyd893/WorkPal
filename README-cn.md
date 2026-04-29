@@ -1,6 +1,8 @@
 # WorkPal
 
-WorkPal 是一个基于 Go + React 的办公协作演示项目。当前版本已经不只是一个聊天外壳，包含以下能力：
+中文说明 | [English](README.md)
+
+WorkPal 是一个基于 Go 微服务 + React 的办公协作演示项目。当前版本已经不只是一个聊天外壳，包含以下能力：
 
 - 用于验收测试的内置管理员和员工账号
 - 双语界面：`English / 简体中文`
@@ -13,10 +15,10 @@ WorkPal 是一个基于 Go + React 的办公协作演示项目。当前版本已
 
 ## 技术栈
 
-- 后端：Go、Gin、GORM、PostgreSQL、Redis、Bleve
+- 后端：Go 微服务、Gin、GORM、PostgreSQL、Redis Streams、Bleve
 - 前端：React、Vite、Zustand
 - 文件存储：默认本地存储，同时支持 MinIO
-- 实时通信：WebSocket
+- 实时通信：通过 IM 服务和 API Gateway 转发 WebSocket
 
 ## 环境要求
 
@@ -38,8 +40,12 @@ docker version
 | 服务 | URL | 说明 |
 |---|---|---|
 | 前端 | `http://localhost:3000` | Vite 开发服务器 |
-| 后端 | `http://localhost:8080` | Gin API |
-| 健康检查 | `http://localhost:8080/health` | 检查 PostgreSQL 和 Redis |
+| API Gateway | `http://localhost:8080` | HTTP 和 WebSocket 的前端统一入口 |
+| User Service | `http://localhost:8081` | 认证、用户、部门 |
+| IM Service | `http://localhost:8082` | 会话、消息、WebSocket |
+| File Service | `http://localhost:8083` | 个人文件和群文件 |
+| Search Service | `http://localhost:8084` | Bleve 搜索 API 和消息索引消费者 |
+| 健康检查 | `http://localhost:8080/health` | 网关健康检查端点 |
 | PostgreSQL | `localhost:5432` | `workpal / workpal123` |
 | Redis | `localhost:6379` | 默认无密码 |
 | MinIO API | `http://localhost:9000` | 对象存储 |
@@ -62,20 +68,58 @@ docker compose -f docker/docker-compose.yaml ps
 - `redis` 状态为 `Up`
 - `minio` 状态为 `Up`
 
-### 2. 启动后端
+### 2. 启动后端微服务
 
-打开一个新的终端：
+分别打开多个终端启动以下服务：
+
+```powershell
+cd backend
+go run ./cmd/user-service
+```
+
+```powershell
+cd backend
+go run ./cmd/im-service
+```
+
+```powershell
+cd backend
+go run ./cmd/file-service
+```
+
+```powershell
+cd backend
+go run ./cmd/search-service
+```
+
+```powershell
+cd backend
+go run ./cmd/gateway
+```
+
+前端只需要访问 Gateway。Gateway 会把请求转发到对应领域服务：
+
+| Gateway 路径 | 上游服务 |
+|---|---|
+| `/api/v1/auth/*`、`/api/v1/users*`、`/api/v1/departments*` | User Service |
+| `/api/v1/conversations*`、`/api/v1/messages*`、`/ws` | IM Service |
+| `/api/v1/files*`、`/api/v1/conversations/:id/files` | File Service |
+| `/api/v1/search*` | Search Service |
+
+为了兼容快速本地调试，保留了一体化后端启动方式：
 
 ```powershell
 cd backend
 go run ./cmd/server
 ```
 
-重要启动行为：
+微服务模式下的重要启动行为：
 
-1. 后端启动时会执行 `AutoMigrate`。
-2. 在非 `release` 模式下，会自动确保部门、员工和验收账号等种子数据存在。
-3. 除非需要覆盖样例配置，否则不需要创建 `backend/configs/config.yaml`。
+1. 每个服务启动时迁移自己负责的数据表。
+2. User Service 在非 `release` 模式下会自动确保部门、员工和验收账号等种子数据存在。
+3. IM Service 将消息写入 PostgreSQL，并向 Redis Streams 发布消息索引事件。
+4. Search Service 消费 Redis Streams 事件，并更新 Bleve 索引。
+5. 除非需要覆盖样例配置，否则不需要创建 `backend/configs/config.yaml`。
 
 后端配置查找顺序：
 
@@ -117,8 +161,24 @@ http://localhost:3000
 
 前端代理规则：
 
-- `/api/*` -> `http://localhost:8080`
-- `/ws` -> `ws://localhost:8080`
+- `/api/*` -> `http://localhost:8080` -> API Gateway -> 目标服务
+- `/ws` -> `ws://localhost:8080` -> API Gateway -> IM Service
+
+## 微服务消息流
+
+聊天消息使用 HTTP 保证持久化，使用 Redis Streams 做跨服务索引解耦：
+
+```text
+Frontend
+  -> API Gateway
+  -> IM Service
+  -> PostgreSQL
+  -> Redis Streams: message.upserted / message.deleted
+  -> Search Service
+  -> Bleve index
+```
+
+这样即使搜索索引服务短暂不可用，也不会影响消息发送。PostgreSQL 仍是消息事实源，Redis Streams 用来解耦 IM 写入和搜索索引更新。
 
 ## 验收账号
 
@@ -235,6 +295,7 @@ Invoke-RestMethod `
 ```powershell
 cd backend
 go test ./...
+make build-services
 
 cd ..\frontend
 npm test
@@ -278,6 +339,7 @@ docker compose -f docker/docker-compose.yaml down
 
 ## 相关文档
 
+- [README.md](README.md)
 - [frontend/README.md](frontend/README.md)
 - [docs/acceptance-testing.md](docs/acceptance-testing.md)
 - [docs/项目技术特点学习笔记.md](docs/项目技术特点学习笔记.md)

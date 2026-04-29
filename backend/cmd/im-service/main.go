@@ -1,0 +1,97 @@
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/Tangyd893/WorkPal/backend/internal/im/handler"
+	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
+	"github.com/Tangyd893/WorkPal/backend/internal/im/repo"
+	"github.com/Tangyd893/WorkPal/backend/internal/im/service"
+	imWS "github.com/Tangyd893/WorkPal/backend/internal/im/ws"
+	"github.com/Tangyd893/WorkPal/backend/internal/platform"
+	"github.com/Tangyd893/WorkPal/backend/pkg/auth"
+	"github.com/Tangyd893/WorkPal/backend/pkg/msgqueue"
+	"github.com/gin-gonic/gin"
+)
+
+func main() {
+	cfg, err := platform.LoadConfig()
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+
+	db, sqlDB, err := platform.OpenDB(cfg)
+	if err != nil {
+		log.Fatalf("open database: %v", err)
+	}
+	defer sqlDB.Close()
+
+	redisClient, err := platform.OpenRedis(cfg)
+	if err != nil {
+		log.Fatalf("open redis: %v", err)
+	}
+	defer redisClient.Close()
+	if err := platform.InitCache(cfg); err != nil {
+		log.Fatalf("init cache: %v", err)
+	}
+	msgqueue.Init(msgqueue.NewRedisStreams(redisClient, cfg.Redis.StreamsKey, "workpal-im"))
+
+	if err := db.AutoMigrate(
+		&model.Conversation{},
+		&model.ConversationMember{},
+		&model.Message{},
+		&model.MessageRead{},
+	); err != nil {
+		log.Fatalf("migrate im service schema: %v", err)
+	}
+
+	convRepo := repo.NewConversationRepo(db)
+	msgRepo := repo.NewMessageRepo(db)
+	convSvc := service.NewConversationService(convRepo)
+	msgSvc := service.NewMessageService(msgRepo)
+	_ = service.NewPresenceService()
+	hub := imWS.InitHub()
+
+	convHandler := handler.NewConversationHandler(convSvc)
+	msgHandler := handler.NewMessageHandler(msgSvc, convSvc, hub, nil)
+	wsHandler := handler.NewWebSocketHandler(hub, convSvc)
+
+	r := platform.NewRouter(cfg, "im-service")
+	platform.RegisterHealth(r, sqlDB, redisClient)
+	apiV1 := r.Group("/api/v1")
+	convHandler.RegisterRoutes(apiV1)
+	msgHandler.RegisterRoutes(apiV1)
+	registerWebSocket(r, wsHandler)
+
+	if err := platform.RunHTTP("im-service", cfg.Services.IMPort, r, func() {
+		hub.Stop()
+	}); err != nil {
+		log.Fatalf("im service stopped: %v", err)
+	}
+}
+
+func registerWebSocket(r *gin.Engine, wsHandler *handler.WebSocketHandler) {
+	r.GET("/ws", func(c *gin.Context) {
+		var tokenStr string
+		if t := c.Query("token"); t != "" {
+			tokenStr = t
+		} else if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+			tokenStr = authHeader
+			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+				tokenStr = authHeader[7:]
+			}
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
+			return
+		}
+
+		claims, err := auth.ParseToken(tokenStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			return
+		}
+		c.Set("userID", claims.UserID)
+		wsHandler.Handle(c)
+	})
+}

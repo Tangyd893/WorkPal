@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Server   ServerConfig
+	Services ServicesConfig
 	Database DatabaseConfig
 	Redis    RedisConfig
 	File     FileConfig
@@ -21,6 +22,18 @@ type ServerConfig struct {
 	Mode           string
 	JWTSecret      string
 	JWTExpiryHours int
+}
+
+type ServicesConfig struct {
+	GatewayPort int
+	UserPort    int
+	IMPort      int
+	FilePort    int
+	SearchPort  int
+	UserURL     string
+	IMURL       string
+	FileURL     string
+	SearchURL   string
 }
 
 type DatabaseConfig struct {
@@ -89,6 +102,15 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("server.mode", "debug")
 	viper.SetDefault("server.jwtExpiryHours", 72)
+	viper.SetDefault("services.gatewayPort", 8080)
+	viper.SetDefault("services.userPort", 8081)
+	viper.SetDefault("services.imPort", 8082)
+	viper.SetDefault("services.filePort", 8083)
+	viper.SetDefault("services.searchPort", 8084)
+	viper.SetDefault("services.userURL", "http://localhost:8081")
+	viper.SetDefault("services.imURL", "http://localhost:8082")
+	viper.SetDefault("services.fileURL", "http://localhost:8083")
+	viper.SetDefault("services.searchURL", "http://localhost:8084")
 	viper.SetDefault("database.maxOpenConns", 25)
 	viper.SetDefault("database.maxIdleConns", 5)
 	viper.SetDefault("redis.streamsKey", "workpal:streams:messages")

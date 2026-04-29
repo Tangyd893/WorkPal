@@ -4,6 +4,17 @@ server:
   jwtSecret: "dev-only-change-me"
   jwtExpiryHours: 72
 
+services:
+  gatewayPort: 8080
+  userPort: 8081
+  imPort: 8082
+  filePort: 8083
+  searchPort: 8084
+  userURL: "http://localhost:8081"
+  imURL: "http://localhost:8082"
+  fileURL: "http://localhost:8083"
+  searchURL: "http://localhost:8084"
+
 database:
   host: "localhost"
   port: 5432
