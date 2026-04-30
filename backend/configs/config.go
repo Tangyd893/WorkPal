@@ -11,6 +11,7 @@ type Config struct {
 	Server   ServerConfig
 	Services ServicesConfig
 	Gateway  GatewayConfig
+	Registry RegistryConfig
 	Database DatabaseConfig
 	Redis    RedisConfig
 	File     FileConfig
@@ -22,6 +23,7 @@ type ServerConfig struct {
 	Port           int
 	Mode           string
 	JWTSecret      string
+	InternalToken  string
 	JWTExpiryHours int
 }
 
@@ -37,6 +39,44 @@ type ServicesConfig struct {
 	FileURL       string
 	SearchURL     string
 	WorkspaceURL  string
+}
+
+func (s ServicesConfig) BaseURLFor(service string) (string, error) {
+	switch service {
+	case "gateway":
+		return fmt.Sprintf("http://localhost:%d", s.GatewayPort), nil
+	case "user-service":
+		return s.UserURL, nil
+	case "im-service":
+		return s.IMURL, nil
+	case "file-service":
+		return s.FileURL, nil
+	case "search-service":
+		return s.SearchURL, nil
+	case "workspace-service":
+		return s.WorkspaceURL, nil
+	default:
+		return "", fmt.Errorf("service %q does not have a configured base URL", service)
+	}
+}
+
+func (s ServicesConfig) PortFor(service string) (int, error) {
+	switch service {
+	case "gateway":
+		return s.GatewayPort, nil
+	case "user-service":
+		return s.UserPort, nil
+	case "im-service":
+		return s.IMPort, nil
+	case "file-service":
+		return s.FilePort, nil
+	case "search-service":
+		return s.SearchPort, nil
+	case "workspace-service":
+		return s.WorkspacePort, nil
+	default:
+		return 0, fmt.Errorf("service %q does not have a configured port", service)
+	}
 }
 
 type GatewayConfig struct {
@@ -69,6 +109,13 @@ type GatewayServiceTimeoutsConfig struct {
 	FileMS      int `mapstructure:"fileMs"`
 	SearchMS    int `mapstructure:"searchMs"`
 	WorkspaceMS int `mapstructure:"workspaceMs"`
+}
+
+type RegistryConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	Namespace   string `mapstructure:"namespace"`
+	TTLMS       int    `mapstructure:"ttlMs"`
+	HeartbeatMS int    `mapstructure:"heartbeatMs"`
 }
 
 type DatabaseConfig struct {
@@ -167,6 +214,7 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("server.mode", "debug")
 	viper.SetDefault("server.jwtExpiryHours", 72)
+	viper.SetDefault("server.internalToken", "dev-internal-token")
 	viper.SetDefault("services.gatewayPort", 8080)
 	viper.SetDefault("services.userPort", 8081)
 	viper.SetDefault("services.imPort", 8082)
@@ -191,6 +239,10 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("gateway.timeouts.fileMs", 20000)
 	viper.SetDefault("gateway.timeouts.searchMs", 5000)
 	viper.SetDefault("gateway.timeouts.workspaceMs", 8000)
+	viper.SetDefault("registry.enabled", true)
+	viper.SetDefault("registry.namespace", "workpal:registry")
+	viper.SetDefault("registry.ttlMs", 15000)
+	viper.SetDefault("registry.heartbeatMs", 5000)
 	viper.SetDefault("database.adminDBName", "postgres")
 	viper.SetDefault("database.maxOpenConns", 25)
 	viper.SetDefault("database.maxIdleConns", 5)

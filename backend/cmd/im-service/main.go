@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -41,6 +42,7 @@ func main() {
 		&model.Conversation{},
 		&model.ConversationMember{},
 		&model.Message{},
+		&model.MessageOutbox{},
 		&model.MessageRead{},
 	); err != nil {
 		log.Fatalf("migrate im service schema: %v", err)
@@ -48,13 +50,30 @@ func main() {
 
 	convRepo := repo.NewConversationRepo(db)
 	msgRepo := repo.NewMessageRepo(db)
+	outboxRepo := repo.NewOutboxRepo(db)
 	convSvc := service.NewConversationService(convRepo)
-	msgSvc := service.NewMessageService(msgRepo)
+	commandStore := service.NewGormMessageCommandStore(db, msgRepo, outboxRepo)
+	msgSvc := service.NewReliableMessageService(msgRepo, commandStore)
 	_ = service.NewPresenceService()
+	outboxPublisher := service.NewOutboxPublisher(outboxRepo, msgqueue.NewRedisStreams(redisClient, cfg.Redis.StreamsKey, "workpal-im-outbox"))
+	outboxCtx, outboxCancel := context.WithCancel(context.Background())
+	go outboxPublisher.Run(outboxCtx)
 	hub := imWS.InitHub()
+	clusterBroadcaster := imWS.NewClusterBroadcaster(redisClient, hub, "")
+	hub.SetClusterBroadcaster(clusterBroadcaster)
+	clusterCtx, clusterCancel := context.WithCancel(context.Background())
+	go clusterBroadcaster.Run(clusterCtx)
+
+	registry, registryStop, registryErr := platform.StartServiceRegistration(cfg, redisClient, "im-service", map[string]string{
+		"domain":   "im",
+		"realtime": "websocket",
+	})
+	if registryErr != nil {
+		log.Printf("[im-service] register service instance: %v", registryErr)
+	}
 
 	convHandler := handler.NewConversationHandler(convSvc)
-	msgHandler := handler.NewMessageHandler(msgSvc, convSvc, hub, nil)
+	msgHandler := handler.NewMessageHandler(msgSvc, convSvc, hub, nil, clusterBroadcaster)
 	wsHandler := handler.NewWebSocketHandler(hub, convSvc)
 
 	r := platform.NewRouter(cfg, "im-service")
@@ -67,10 +86,18 @@ func main() {
 	apiV1 := r.Group("/api/v1")
 	convHandler.RegisterRoutes(apiV1)
 	msgHandler.RegisterRoutes(apiV1)
-	convHandler.RegisterInternalRoutes(r.Group(""))
+	convHandler.RegisterInternalRoutes(r.Group(""), cfg.Server.InternalToken)
 	registerWebSocket(r, wsHandler)
 
 	if err := platform.RunHTTP("im-service", cfg.Services.IMPort, r, func() {
+		if registry != nil {
+			_ = registry.Deregister(context.Background())
+		}
+		if registryStop != nil {
+			registryStop()
+		}
+		outboxCancel()
+		clusterCancel()
 		hub.Stop()
 	}); err != nil {
 		log.Fatalf("im service stopped: %v", err)

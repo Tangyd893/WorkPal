@@ -64,6 +64,29 @@ func (Message) TableName() string {
 	return "messages"
 }
 
+const (
+	OutboxStatusPending    = "pending"
+	OutboxStatusPublishing = "publishing"
+	OutboxStatusDelivered  = "delivered"
+)
+
+type MessageOutbox struct {
+	ID            int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	Topic         string     `gorm:"size:128;index" json:"topic"`
+	Payload       string     `gorm:"type:jsonb" json:"payload"`
+	Status        string     `gorm:"size:32;index" json:"status"`
+	RetryCount    int        `gorm:"not null;default:0" json:"retry_count"`
+	LastError     string     `gorm:"type:text" json:"last_error"`
+	NextAttemptAt time.Time  `gorm:"index" json:"next_attempt_at"`
+	DeliveredAt   *time.Time `json:"delivered_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+func (MessageOutbox) TableName() string {
+	return "message_outbox"
+}
+
 type MessageRead struct {
 	UserID int64     `gorm:"primaryKey;autoIncrement:false" json:"user_id"`
 	ConvID int64     `gorm:"primaryKey;autoIncrement:false" json:"conv_id"`

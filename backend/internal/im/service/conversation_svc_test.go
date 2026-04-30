@@ -211,7 +211,7 @@ func TestConversationService_RemoveMember(t *testing.T) {
 		priv, _ := svc.CreatePrivateConv(ctx, 1, 2)
 		err := svc.RemoveMember(ctx, priv.ID, 2)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "私聊无法操作成员")
+		assert.Contains(t, err.Error(), "私聊无法修改成员")
 	})
 }
 

@@ -39,12 +39,40 @@ func main() {
 	userSvc := userService.NewUserService(userRepoInst)
 	userHdlr := userHandler.NewUserHandler(userSvc, authSvc)
 
+	var registry *platform.ServiceRegistry
+	var registryStop context.CancelFunc
+	var registryRedisCloser interface{ Close() error }
+	if cfg.Registry.Enabled {
+		registryRedis, redisErr := platform.OpenRedis(cfg)
+		if redisErr != nil {
+			log.Printf("[user-service] service registry unavailable: %v", redisErr)
+		} else {
+			registryRedisCloser = registryRedis
+			registry, registryStop, redisErr = platform.StartServiceRegistration(cfg, registryRedis, "user-service", map[string]string{
+				"domain": "identity",
+			})
+			if redisErr != nil {
+				log.Printf("[user-service] register service instance: %v", redisErr)
+			}
+		}
+	}
+
 	r := platform.NewRouter(cfg, "user-service")
 	platform.RegisterHealth(r, "user-service", platform.SQLHealthCheck("postgres", sqlDB))
 	apiV1 := r.Group("/api/v1")
 	userHdlr.RegisterRoutes(apiV1)
 
-	if err := platform.RunHTTP("user-service", cfg.Services.UserPort, r, nil); err != nil {
+	if err := platform.RunHTTP("user-service", cfg.Services.UserPort, r, func() {
+		if registry != nil {
+			_ = registry.Deregister(context.Background())
+		}
+		if registryStop != nil {
+			registryStop()
+		}
+		if registryRedisCloser != nil {
+			_ = registryRedisCloser.Close()
+		}
+	}); err != nil {
 		log.Fatalf("user service stopped: %v", err)
 	}
 }

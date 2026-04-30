@@ -20,7 +20,7 @@ func main() {
 	r := platform.NewRouter(cfg, gatewayServiceName)
 	app.Register(r)
 
-	if err := platform.RunHTTP(gatewayServiceName, cfg.Services.GatewayPort, r, nil); err != nil {
+	if err := platform.RunHTTP(gatewayServiceName, cfg.Services.GatewayPort, r, app.Shutdown); err != nil {
 		log.Fatalf("gateway stopped: %v", err)
 	}
 }

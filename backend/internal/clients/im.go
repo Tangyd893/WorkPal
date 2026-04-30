@@ -11,8 +11,9 @@ import (
 )
 
 type IMClient struct {
-	baseURL string
-	client  *http.Client
+	baseURL       string
+	internalToken string
+	client        *http.Client
 }
 
 type apiResponse[T any] struct {
@@ -21,10 +22,15 @@ type apiResponse[T any] struct {
 	Data    T      `json:"data"`
 }
 
-func NewIMClient(baseURL string) *IMClient {
+func NewIMClient(baseURL string, internalToken ...string) *IMClient {
+	token := ""
+	if len(internalToken) > 0 {
+		token = internalToken[0]
+	}
 	return &IMClient{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		client:  &http.Client{Timeout: 5 * time.Second},
+		baseURL:       strings.TrimRight(baseURL, "/"),
+		internalToken: token,
+		client:        &http.Client{Timeout: 5 * time.Second},
 	}
 }
 
@@ -62,6 +68,9 @@ func (c *IMClient) get(ctx context.Context, path string, out interface{}) error 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return err
+	}
+	if c.internalToken != "" {
+		req.Header.Set("X-Internal-Token", c.internalToken)
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {

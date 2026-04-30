@@ -4,12 +4,14 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/gin-gonic/gin"
 )
 
-func (h *ConversationHandler) RegisterInternalRoutes(rg *gin.RouterGroup) {
+func (h *ConversationHandler) RegisterInternalRoutes(rg *gin.RouterGroup, internalToken string) {
 	internal := rg.Group("/internal")
+	internal.Use(middleware.InternalTokenRequired(internalToken))
 	internal.GET("/conversations/:id/members/:uid", h.InternalIsMember)
 	internal.GET("/users/:uid/conversations", h.InternalListUserConversationIDs)
 }

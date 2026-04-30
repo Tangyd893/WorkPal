@@ -9,12 +9,14 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	config "github.com/Tangyd893/WorkPal/backend/configs"
 	"github.com/Tangyd893/WorkPal/backend/internal/platform"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -26,18 +28,24 @@ type gatewayApp struct {
 	routes        []*routeSpec
 	limiter       *rateLimiter
 	healthTimeout time.Duration
+	registry      *platform.ServiceRegistry
+	registryStop  context.CancelFunc
+	registryRedis *redis.Client
 }
 
 type upstreamService struct {
 	name              string
-	baseURL           string
-	healthURL         string
+	cfg               *config.Config
+	registryClient    *redis.Client
+	fallbackBaseURL   string
+	fallbackHealthURL string
 	timeout           time.Duration
 	retryMaxAttempts  int
 	retryBackoff      time.Duration
 	supportsWebSocket bool
 	breaker           *circuitBreaker
 	proxy             *httputil.ReverseProxy
+	requestCounter    uint64
 }
 
 type routeSpec struct {
@@ -67,6 +75,9 @@ type serviceSummary struct {
 	Name              string                 `json:"name"`
 	BaseURL           string                 `json:"base_url"`
 	HealthURL         string                 `json:"health_url"`
+	DiscoveryMode     string                 `json:"discovery_mode"`
+	DiscoveredCount   int                    `json:"discovered_count"`
+	Instances         []serviceInstanceInfo  `json:"instances"`
 	TimeoutMS         int64                  `json:"timeout_ms"`
 	RetryMaxAttempts  int                    `json:"retry_max_attempts"`
 	RetryBackoffMS    int64                  `json:"retry_backoff_ms"`
@@ -74,9 +85,52 @@ type serviceSummary struct {
 	CircuitBreaker    circuitBreakerSnapshot `json:"circuit_breaker"`
 }
 
+type serviceInstanceInfo struct {
+	ID        string            `json:"id"`
+	BaseURL   string            `json:"base_url"`
+	HealthURL string            `json:"health_url"`
+	Version   string            `json:"version"`
+	UpdatedAt string            `json:"updated_at"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+type upstreamRequestInfo struct {
+	service       string
+	baseURL       string
+	instanceID    string
+	discoveryMode string
+}
+
 func newGatewayApp(cfg *config.Config) (*gatewayApp, error) {
-	services, err := buildUpstreamServices(cfg)
+	var registryClient *redis.Client
+	var registry *platform.ServiceRegistry
+	var registryStop context.CancelFunc
+	if cfg.Registry.Enabled {
+		client, err := platform.OpenRedis(cfg)
+		if err != nil {
+			log.Printf("[gateway] service registry unavailable, falling back to static upstream catalog: %v", err)
+		} else {
+			registryClient = client
+			reg, stop, err := platform.StartServiceRegistration(cfg, client, gatewayServiceName, map[string]string{
+				"role": "ingress",
+			})
+			if err != nil {
+				log.Printf("[gateway] register gateway instance: %v", err)
+			} else {
+				registry = reg
+				registryStop = stop
+			}
+		}
+	}
+
+	services, err := buildUpstreamServices(cfg, registryClient)
 	if err != nil {
+		if registryStop != nil {
+			registryStop()
+		}
+		if registryClient != nil {
+			_ = registryClient.Close()
+		}
 		return nil, err
 	}
 
@@ -95,6 +149,9 @@ func newGatewayApp(cfg *config.Config) (*gatewayApp, error) {
 		routes:        routes,
 		limiter:       newRateLimiter(maxInt(1, cfg.Gateway.RateLimit.Requests), rateWindow),
 		healthTimeout: durationFromMS(cfg.Gateway.HealthTimeoutMS),
+		registry:      registry,
+		registryStop:  registryStop,
+		registryRedis: registryClient,
 	}, nil
 }
 
@@ -106,7 +163,9 @@ func (a *gatewayApp) Register(r *gin.Engine) {
 	}
 	for _, service := range a.services {
 		client := &http.Client{Timeout: healthTimeout}
-		healthChecks = append(healthChecks, platform.HTTPHealthCheck(service.name, service.healthURL, client))
+		healthChecks = append(healthChecks, platform.NamedHealthCheck(service.name, func(ctx context.Context) error {
+			return service.checkHealth(ctx, client)
+		}))
 	}
 
 	r.Use(requestIDMiddleware())
@@ -127,6 +186,18 @@ func (a *gatewayApp) Register(r *gin.Engine) {
 	r.NoRoute(a.handleProxy)
 }
 
+func (a *gatewayApp) Shutdown() {
+	if a.registry != nil {
+		_ = a.registry.Deregister(context.Background())
+	}
+	if a.registryStop != nil {
+		a.registryStop()
+	}
+	if a.registryRedis != nil {
+		_ = a.registryRedis.Close()
+	}
+}
+
 func (a *gatewayApp) handleRoutes(c *gin.Context) {
 	out := make([]routeSummary, 0, len(a.routes))
 	for _, route := range a.routes {
@@ -141,7 +212,7 @@ func (a *gatewayApp) handleRoutes(c *gin.Context) {
 func (a *gatewayApp) handleServices(c *gin.Context) {
 	out := make([]serviceSummary, 0, len(a.services))
 	for _, service := range a.services {
-		out = append(out, service.summary())
+		out = append(out, service.summary(c.Request.Context()))
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"service":  gatewayServiceName,
@@ -186,7 +257,7 @@ func (a *gatewayApp) match(req *http.Request) *routeSpec {
 	return nil
 }
 
-func buildUpstreamServices(cfg *config.Config) ([]*upstreamService, error) {
+func buildUpstreamServices(cfg *config.Config, registryClient *redis.Client) ([]*upstreamService, error) {
 	timeoutCfg := cfg.Gateway.Timeouts
 	retryCfg := cfg.Gateway.Retry
 	breakerCfg := cfg.Gateway.CircuitBreaker
@@ -212,8 +283,10 @@ func buildUpstreamServices(cfg *config.Config) ([]*upstreamService, error) {
 		}
 		service := &upstreamService{
 			name:              spec.name,
-			baseURL:           strings.TrimRight(spec.baseURL, "/"),
-			healthURL:         serviceHealthURL(spec.baseURL),
+			cfg:               cfg,
+			registryClient:    registryClient,
+			fallbackBaseURL:   strings.TrimRight(spec.baseURL, "/"),
+			fallbackHealthURL: serviceHealthURL(spec.baseURL),
 			timeout:           timeout,
 			retryMaxAttempts:  maxInt(1, retryCfg.MaxAttempts),
 			retryBackoff:      durationFromMS(retryCfg.BackoffMS),
@@ -342,24 +415,54 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 }
 
 func newReverseProxy(service *upstreamService) (*httputil.ReverseProxy, error) {
-	target, err := url.Parse(service.baseURL)
+	target, err := url.Parse(service.fallbackBaseURL)
 	if err != nil {
 		return nil, err
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
-	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
+		incomingHost := req.Host
+		targetInstance, discoveryMode, resolveErr := service.resolveInstance(req.Context())
+		targetURL := service.fallbackBaseURL
+		if resolveErr != nil {
+			log.Printf("[gateway] resolve upstream %s: %v", service.name, resolveErr)
+		} else if targetInstance.BaseURL != "" {
+			targetURL = targetInstance.BaseURL
+		}
+
+		target, err := url.Parse(targetURL)
+		if err == nil {
+			req.URL.Scheme = target.Scheme
+			req.URL.Host = target.Host
+			req.Host = target.Host
+			if target.Path != "" {
+				req.URL.Path = joinURLPath(target.Path, req.URL.Path)
+			}
+		}
+		ctx := context.WithValue(req.Context(), upstreamRequestKey{}, upstreamRequestInfo{
+			service:       service.name,
+			baseURL:       targetURL,
+			instanceID:    targetInstance.ID,
+			discoveryMode: discoveryMode,
+		})
+		*req = *req.WithContext(ctx)
 		if requestID := requestIDFromContext(req.Context()); requestID != "" {
 			req.Header.Set("X-Request-ID", requestID)
 		}
 		req.Header.Set("X-Forwarded-Proto", forwardedProto(req))
-		req.Header.Set("X-Forwarded-Host", req.Host)
+		req.Header.Set("X-Forwarded-Host", incomingHost)
 	}
 	proxy.Transport = newRetryTransport(http.DefaultTransport, service.retryMaxAttempts, service.retryBackoff)
 	proxy.ModifyResponse = func(resp *http.Response) error {
+		upstreamInfo := upstreamRequestFromContext(resp.Request.Context())
 		resp.Header.Set("X-Upstream-Service", service.name)
+		if upstreamInfo.instanceID != "" {
+			resp.Header.Set("X-Upstream-Instance", upstreamInfo.instanceID)
+		}
+		if upstreamInfo.discoveryMode != "" {
+			resp.Header.Set("X-Upstream-Discovery", upstreamInfo.discoveryMode)
+		}
 		if resp.StatusCode >= http.StatusInternalServerError {
 			service.breaker.OnFailure()
 			return nil
@@ -369,7 +472,7 @@ func newReverseProxy(service *upstreamService) (*httputil.ReverseProxy, error) {
 	}
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		service.breaker.OnFailure()
-		log.Printf("gateway proxy error for %s -> %s: %v", r.URL.Path, service.baseURL, err)
+		log.Printf("gateway proxy error for %s -> %s: %v", r.URL.Path, upstreamRequestFromContext(r.Context()).baseURL, err)
 
 		status := http.StatusBadGateway
 		switch {
@@ -381,6 +484,59 @@ func newReverseProxy(service *upstreamService) (*httputil.ReverseProxy, error) {
 		writeGatewayError(w, status, "upstream service unavailable", requestIDFromContext(r.Context()))
 	}
 	return proxy, nil
+}
+
+func (s *upstreamService) fallbackInstance() platform.ServiceInstance {
+	return platform.ServiceInstance{
+		ID:        "static",
+		Service:   s.name,
+		BaseURL:   s.fallbackBaseURL,
+		HealthURL: s.fallbackHealthURL,
+		Version:   platform.Version,
+	}
+}
+
+func (s *upstreamService) resolveDiscoveredInstances(ctx context.Context) ([]platform.ServiceInstance, error) {
+	if s.registryClient == nil || s.cfg == nil || !s.cfg.Registry.Enabled {
+		return []platform.ServiceInstance{}, nil
+	}
+	return platform.ListServiceInstances(ctx, s.cfg, s.registryClient, s.name)
+}
+
+func (s *upstreamService) resolveInstance(ctx context.Context) (platform.ServiceInstance, string, error) {
+	instances, err := s.resolveDiscoveredInstances(ctx)
+	if err != nil {
+		return s.fallbackInstance(), "static", err
+	}
+	if len(instances) == 0 {
+		return s.fallbackInstance(), "static", nil
+	}
+	index := atomic.AddUint64(&s.requestCounter, 1)
+	selected := instances[(int(index)-1)%len(instances)]
+	if selected.HealthURL == "" {
+		selected.HealthURL = serviceHealthURL(selected.BaseURL)
+	}
+	return selected, "registry", nil
+}
+
+func (s *upstreamService) checkHealth(ctx context.Context, client *http.Client) error {
+	instance, _, err := s.resolveInstance(ctx)
+	if err != nil {
+		log.Printf("[gateway] service discovery degraded for %s, falling back to health URL %s: %v", s.name, s.fallbackHealthURL, err)
+	}
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, instance.HealthURL, nil)
+	if reqErr != nil {
+		return reqErr
+	}
+	resp, doErr := client.Do(req)
+	if doErr != nil {
+		return doErr
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("health endpoint returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func (r routeSpec) matches(req *http.Request) bool {
@@ -436,11 +592,47 @@ func (r routeSpec) matchExpression() string {
 	return "*"
 }
 
-func (s upstreamService) summary() serviceSummary {
+func (s *upstreamService) summary(ctx context.Context) serviceSummary {
+	instances, err := s.resolveDiscoveredInstances(ctx)
+	discoveryMode := "static"
+	if len(instances) > 0 {
+		discoveryMode = "registry"
+	}
+	if err != nil {
+		log.Printf("[gateway] service summary lookup failed for %s: %v", s.name, err)
+		instances = nil
+	}
+
+	instanceSummaries := make([]serviceInstanceInfo, 0, maxInt(1, len(instances)))
+	if len(instances) == 0 {
+		fallback := s.fallbackInstance()
+		instanceSummaries = append(instanceSummaries, serviceInstanceInfo{
+			ID:        fallback.ID,
+			BaseURL:   fallback.BaseURL,
+			HealthURL: fallback.HealthURL,
+			Version:   fallback.Version,
+			UpdatedAt: fallback.UpdatedAt,
+		})
+	} else {
+		for _, instance := range instances {
+			instanceSummaries = append(instanceSummaries, serviceInstanceInfo{
+				ID:        instance.ID,
+				BaseURL:   instance.BaseURL,
+				HealthURL: instance.HealthURL,
+				Version:   instance.Version,
+				UpdatedAt: instance.UpdatedAt,
+				Metadata:  instance.Metadata,
+			})
+		}
+	}
+
 	return serviceSummary{
 		Name:              s.name,
-		BaseURL:           s.baseURL,
-		HealthURL:         s.healthURL,
+		BaseURL:           s.fallbackBaseURL,
+		HealthURL:         s.fallbackHealthURL,
+		DiscoveryMode:     discoveryMode,
+		DiscoveredCount:   len(instances),
+		Instances:         instanceSummaries,
 		TimeoutMS:         s.timeout.Milliseconds(),
 		RetryMaxAttempts:  s.retryMaxAttempts,
 		RetryBackoffMS:    s.retryBackoff.Milliseconds(),
@@ -450,6 +642,7 @@ func (s upstreamService) summary() serviceSummary {
 }
 
 type requestIDKey struct{}
+type upstreamRequestKey struct{}
 
 func requestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -468,12 +661,18 @@ func requestIDFromContext(ctx context.Context) string {
 	return requestID
 }
 
+func upstreamRequestFromContext(ctx context.Context) upstreamRequestInfo {
+	info, _ := ctx.Value(upstreamRequestKey{}).(upstreamRequestInfo)
+	return info
+}
+
 func gatewayAccessLog() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
+		upstreamInfo := upstreamRequestFromContext(c.Request.Context())
 		log.Printf(
-			"[gateway] request_id=%s method=%s path=%s status=%d latency=%s client=%s upstream=%s route=%s",
+			"[gateway] request_id=%s method=%s path=%s status=%d latency=%s client=%s upstream=%s route=%s instance=%s discovery=%s",
 			requestIDFromContext(c.Request.Context()),
 			c.Request.Method,
 			c.Request.URL.Path,
@@ -482,6 +681,8 @@ func gatewayAccessLog() gin.HandlerFunc {
 			clientIP(c.Request),
 			c.Writer.Header().Get("X-Upstream-Service"),
 			c.Writer.Header().Get("X-Gateway-Route"),
+			upstreamInfo.instanceID,
+			upstreamInfo.discoveryMode,
 		)
 	}
 }
@@ -524,6 +725,19 @@ func forwardedProto(r *http.Request) string {
 		return "https"
 	}
 	return "http"
+}
+
+func joinURLPath(basePath, requestPath string) string {
+	baseHasSlash := strings.HasSuffix(basePath, "/")
+	requestHasSlash := strings.HasPrefix(requestPath, "/")
+	switch {
+	case baseHasSlash && requestHasSlash:
+		return basePath + requestPath[1:]
+	case !baseHasSlash && !requestHasSlash:
+		return basePath + "/" + requestPath
+	default:
+		return basePath + requestPath
+	}
 }
 
 func serviceHealthURL(baseURL string) string {

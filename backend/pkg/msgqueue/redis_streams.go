@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -16,6 +17,8 @@ type RedisStreams struct {
 	client *redis.Client
 	key    string
 	group  string
+	mu     sync.RWMutex
+	groups map[string]struct{}
 }
 
 var _ Interface = (*RedisStreams)(nil)
@@ -26,6 +29,7 @@ func NewRedisStreams(client *redis.Client, key, group string) *RedisStreams {
 		client: client,
 		key:    key,
 		group:  group,
+		groups: make(map[string]struct{}),
 	}
 }
 
@@ -51,9 +55,10 @@ func (r *RedisStreams) Subscribe(topic string, handler func([]byte)) error {
 
 func (r *RedisStreams) SubscribeWithOptions(topic string, options SubscribeOptions, handler Handler) error {
 	options = r.normalizeOptions(topic, options)
-	if err := r.ensureGroup(context.Background()); err != nil {
+	if err := r.ensureGroup(context.Background(), options.Group); err != nil {
 		return err
 	}
+	r.trackGroup(options.Group)
 
 	go r.consume(topic, options, handler)
 	go r.reclaimPending(topic, options, handler)
@@ -64,7 +69,7 @@ func (r *RedisStreams) consume(topic string, options SubscribeOptions, handler H
 	ctx := context.Background()
 	for {
 		streams, err := r.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    r.group,
+			Group:    options.Group,
 			Consumer: options.Consumer,
 			Streams:  []string{r.key, ">"},
 			Count:    10,
@@ -94,7 +99,7 @@ func (r *RedisStreams) reclaimPending(topic string, options SubscribeOptions, ha
 	for range ticker.C {
 		pending, err := r.client.XPendingExt(ctx, &redis.XPendingExtArgs{
 			Stream: r.key,
-			Group:  r.group,
+			Group:  options.Group,
 			Start:  "-",
 			End:    "+",
 			Count:  20,
@@ -117,7 +122,7 @@ func (r *RedisStreams) reclaimPending(topic string, options SubscribeOptions, ha
 
 			claimed, err := r.client.XClaim(ctx, &redis.XClaimArgs{
 				Stream:   r.key,
-				Group:    r.group,
+				Group:    options.Group,
 				Consumer: options.Consumer,
 				MinIdle:  options.ClaimMinIdle,
 				Messages: []string{pendingMsg.ID},
@@ -136,23 +141,26 @@ func (r *RedisStreams) reclaimPending(topic string, options SubscribeOptions, ha
 func (r *RedisStreams) handleMessage(ctx context.Context, topic string, options SubscribeOptions, msg redis.XMessage, handler Handler) {
 	topicVal, ok := msg.Values["topic"].(string)
 	if !ok {
-		_ = r.client.XAck(ctx, r.key, r.group, msg.ID).Err()
+		_ = r.client.XAck(ctx, r.key, options.Group, msg.ID).Err()
 		return
 	}
 	if topicVal != topic {
+		if err := r.client.XAck(ctx, r.key, options.Group, msg.ID).Err(); err != nil {
+			log.Printf("[redis-streams] ack skipped topic=%s id=%s group=%s: %v", topicVal, msg.ID, options.Group, err)
+		}
 		return
 	}
 
 	dataStr, ok := msg.Values["data"].(string)
 	if !ok {
-		_ = r.client.XAck(ctx, r.key, r.group, msg.ID).Err()
+		_ = r.client.XAck(ctx, r.key, options.Group, msg.ID).Err()
 		return
 	}
 	if err := handler([]byte(dataStr)); err != nil {
 		log.Printf("[redis-streams] handler failed topic=%s id=%s: %v", topic, msg.ID, err)
 		return
 	}
-	if err := r.client.XAck(ctx, r.key, r.group, msg.ID).Err(); err != nil {
+	if err := r.client.XAck(ctx, r.key, options.Group, msg.ID).Err(); err != nil {
 		log.Printf("[redis-streams] ack failed topic=%s id=%s: %v", topic, msg.ID, err)
 	}
 }
@@ -160,7 +168,7 @@ func (r *RedisStreams) handleMessage(ctx context.Context, topic string, options 
 func (r *RedisStreams) movePendingToDeadLetter(ctx context.Context, messageID string, options SubscribeOptions) {
 	claimed, err := r.client.XClaim(ctx, &redis.XClaimArgs{
 		Stream:   r.key,
-		Group:    r.group,
+		Group:    options.Group,
 		Consumer: options.Consumer,
 		MinIdle:  0,
 		Messages: []string{messageID},
@@ -172,7 +180,7 @@ func (r *RedisStreams) movePendingToDeadLetter(ctx context.Context, messageID st
 	for _, msg := range claimed {
 		values := map[string]interface{}{
 			"stream":      r.key,
-			"group":       r.group,
+			"group":       options.Group,
 			"source_id":   msg.ID,
 			"topic":       msg.Values["topic"],
 			"data":        msg.Values["data"],
@@ -183,15 +191,18 @@ func (r *RedisStreams) movePendingToDeadLetter(ctx context.Context, messageID st
 			log.Printf("[redis-streams] add dead-letter message %s: %v", msg.ID, err)
 			continue
 		}
-		if err := r.client.XAck(ctx, r.key, r.group, msg.ID).Err(); err != nil {
+		if err := r.client.XAck(ctx, r.key, options.Group, msg.ID).Err(); err != nil {
 			log.Printf("[redis-streams] ack dead-letter message %s: %v", msg.ID, err)
 		}
 	}
 }
 
 func (r *RedisStreams) normalizeOptions(topic string, options SubscribeOptions) SubscribeOptions {
+	if options.Group == "" {
+		options.Group = defaultGroupName(r.group, topic)
+	}
 	if options.Consumer == "" {
-		options.Consumer = defaultConsumerName(r.group, topic)
+		options.Consumer = defaultConsumerName(options.Group, topic)
 	}
 	if options.MaxRetries <= 0 {
 		options.MaxRetries = 5
@@ -205,12 +216,36 @@ func (r *RedisStreams) normalizeOptions(topic string, options SubscribeOptions) 
 	return options
 }
 
-func (r *RedisStreams) ensureGroup(ctx context.Context) error {
-	err := r.client.XGroupCreateMkStream(ctx, r.key, r.group, "0").Err()
+func (r *RedisStreams) ensureGroup(ctx context.Context, group string) error {
+	err := r.client.XGroupCreateMkStream(ctx, r.key, group, "0").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}
 	return nil
+}
+
+func (r *RedisStreams) trackGroup(group string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.groups[group] = struct{}{}
+}
+
+func (r *RedisStreams) trackedGroups() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.groups) == 0 {
+		return []string{r.group}
+	}
+	groups := make([]string, 0, len(r.groups))
+	for group := range r.groups {
+		groups = append(groups, group)
+	}
+	return groups
+}
+
+func defaultGroupName(group, topic string) string {
+	topic = strings.NewReplacer(".", "-", ":", "-").Replace(topic)
+	return fmt.Sprintf("%s:%s", group, topic)
 }
 
 func defaultConsumerName(group, topic string) string {
@@ -230,34 +265,46 @@ func (r *RedisStreams) Close() error {
 // GetPending 获取待处理消息数
 func (r *RedisStreams) GetPending() (int64, error) {
 	ctx := context.Background()
-	info, err := r.client.XPending(ctx, r.key, r.group).Result()
-	if err != nil {
-		return 0, err
+	var total int64
+	for _, group := range r.trackedGroups() {
+		info, err := r.client.XPending(ctx, r.key, group).Result()
+		if err != nil {
+			if strings.Contains(strings.ToUpper(err.Error()), "NOGROUP") {
+				continue
+			}
+			return 0, err
+		}
+		total += info.Count
 	}
-	return info.Count, nil
+	return total, nil
 }
 
 // Heal 修复消费者组（将所有pending消息重新激活）
 func (r *RedisStreams) Heal() error {
 	ctx := context.Background()
-	// 读取所有待处理消息
-	pending, err := r.client.XPendingExt(ctx, &redis.XPendingExtArgs{
-		Stream: r.key,
-		Group:  r.group,
-		Start:  "-+",
-		Count:  100,
-	}).Result()
-	if err != nil {
-		return err
-	}
-	// 重新claim这些消息（idle时间设为0，视为重新激活）
-	for _, p := range pending {
-		r.client.XClaim(ctx, &redis.XClaimArgs{
-			Stream:   r.key,
-			Group:    r.group,
-			MinIdle:  0,
-			Messages: []string{p.ID},
-		})
+	for _, group := range r.trackedGroups() {
+		pending, err := r.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+			Stream: r.key,
+			Group:  group,
+			Start:  "-",
+			End:    "+",
+			Count:  100,
+		}).Result()
+		if err != nil {
+			if strings.Contains(strings.ToUpper(err.Error()), "NOGROUP") {
+				continue
+			}
+			return err
+		}
+		for _, p := range pending {
+			r.client.XClaim(ctx, &redis.XClaimArgs{
+				Stream:   r.key,
+				Group:    group,
+				Consumer: defaultConsumerName(group, "heal"),
+				MinIdle:  0,
+				Messages: []string{p.ID},
+			})
+		}
 	}
 	return nil
 }

@@ -10,10 +10,11 @@ import (
 )
 
 type rateLimiter struct {
-	limit  int
-	window time.Duration
-	visits map[string]*rateBucket
-	mu     sync.Mutex
+	limit       int
+	window      time.Duration
+	visits      map[string]*rateBucket
+	lastCleanup time.Time
+	mu          sync.Mutex
 }
 
 type rateBucket struct {
@@ -34,6 +35,8 @@ func (l *rateLimiter) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	l.cleanupExpired(now)
+
 	bucket, ok := l.visits[key]
 	if !ok || now.After(bucket.expiresAt) {
 		l.visits[key] = &rateBucket{count: 1, expiresAt: now.Add(l.window)}
@@ -44,6 +47,25 @@ func (l *rateLimiter) allow(key string) bool {
 	}
 	bucket.count++
 	return true
+}
+
+func (l *rateLimiter) cleanupExpired(now time.Time) {
+	if l.window <= 0 {
+		return
+	}
+	interval := l.window
+	if interval > time.Minute {
+		interval = time.Minute
+	}
+	if !l.lastCleanup.IsZero() && now.Sub(l.lastCleanup) < interval {
+		return
+	}
+	for key, bucket := range l.visits {
+		if now.After(bucket.expiresAt) {
+			delete(l.visits, key)
+		}
+	}
+	l.lastCleanup = now
 }
 
 func rateLimitMiddleware(limiter *rateLimiter) gin.HandlerFunc {

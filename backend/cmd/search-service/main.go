@@ -36,7 +36,15 @@ func main() {
 	msgqueue.Init(queue)
 	subscribeMessageEvents(queue, searchService)
 
-	convSvc := clients.NewIMClient(cfg.Services.IMURL)
+	registry, registryStop, registryErr := platform.StartServiceRegistration(cfg, redisClient, "search-service", map[string]string{
+		"domain": "search",
+		"index":  cfg.Search.Engine,
+	})
+	if registryErr != nil {
+		log.Printf("[search-service] register service instance: %v", registryErr)
+	}
+
+	convSvc := clients.NewIMClient(cfg.Services.IMURL, cfg.Server.InternalToken)
 	searchHdlr := searchHandler.NewSearchHandler(searchService, convSvc)
 
 	r := platform.NewRouter(cfg, "search-service")
@@ -52,7 +60,14 @@ func main() {
 	apiV1 := r.Group("/api/v1")
 	searchHdlr.RegisterRoutes(apiV1)
 
-	if err := platform.RunHTTP("search-service", cfg.Services.SearchPort, r, nil); err != nil {
+	if err := platform.RunHTTP("search-service", cfg.Services.SearchPort, r, func() {
+		if registry != nil {
+			_ = registry.Deregister(context.Background())
+		}
+		if registryStop != nil {
+			registryStop()
+		}
+	}); err != nil {
 		log.Fatalf("search service stopped: %v", err)
 	}
 }

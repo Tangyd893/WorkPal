@@ -15,6 +15,7 @@ type Message struct {
 type Handler func([]byte) error
 
 type SubscribeOptions struct {
+	Group         string
 	Consumer      string
 	MaxRetries    int64
 	DeadLetterKey string

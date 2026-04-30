@@ -17,19 +17,30 @@ type MessageDeletedEvent struct {
 	ID int64 `json:"id"`
 }
 
-func PublishMessageUpserted(ctx context.Context, msg *model.Message) error {
+func MarshalMessageUpserted(msg *model.Message) ([]byte, error) {
 	if msg == nil {
-		return nil
+		return nil, nil
 	}
-	data, err := json.Marshal(msg)
+	return json.Marshal(msg)
+}
+
+func MarshalMessageDeleted(id int64) ([]byte, error) {
+	return json.Marshal(MessageDeletedEvent{ID: id})
+}
+
+func PublishMessageUpserted(ctx context.Context, msg *model.Message) error {
+	data, err := MarshalMessageUpserted(msg)
 	if err != nil {
 		return err
+	}
+	if len(data) == 0 {
+		return nil
 	}
 	return msgqueue.Publish(ctx, TopicMessageUpserted, data)
 }
 
 func PublishMessageDeleted(ctx context.Context, id int64) error {
-	data, err := json.Marshal(MessageDeletedEvent{ID: id})
+	data, err := MarshalMessageDeleted(id)
 	if err != nil {
 		return err
 	}

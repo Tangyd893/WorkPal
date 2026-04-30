@@ -86,6 +86,19 @@ func TestRetryTransportRetriesReadRequestsOnGatewayErrors(t *testing.T) {
 	assert.Equal(t, "2", resp.Header.Get("X-Gateway-Attempts"))
 }
 
+func TestRateLimiterCleansExpiredBuckets(t *testing.T) {
+	limiter := newRateLimiter(1, time.Millisecond)
+
+	assert.True(t, limiter.allow("192.0.2.10"))
+	require.Len(t, limiter.visits, 1)
+
+	time.Sleep(2 * time.Millisecond)
+	assert.True(t, limiter.allow("192.0.2.11"))
+
+	_, exists := limiter.visits["192.0.2.10"]
+	assert.False(t, exists)
+}
+
 type stubRoundTripper struct {
 	responses []*http.Response
 	calls     int

@@ -2,6 +2,7 @@ server:
   port: 8080
   mode: debug
   jwtSecret: "dev-only-change-me"
+  internalToken: "dev-internal-token"
   jwtExpiryHours: 72
 
 services:
@@ -35,6 +36,12 @@ gateway:
     fileMs: 20000
     searchMs: 5000
     workspaceMs: 8000
+
+registry:
+  enabled: true
+  namespace: "workpal:registry"
+  ttlMs: 15000
+  heartbeatMs: 5000
 
 database:
   host: "localhost"

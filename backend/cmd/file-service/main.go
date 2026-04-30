@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	config "github.com/Tangyd893/WorkPal/backend/configs"
@@ -32,15 +33,44 @@ func main() {
 	fileRepoInst := fileRepo.NewFileRepo(db)
 	fileService := fileSvc.NewFileService(fileRepoInst, store, cfg.File.MaxFileSizeMB)
 
-	convSvc := clients.NewIMClient(cfg.Services.IMURL)
+	convSvc := clients.NewIMClient(cfg.Services.IMURL, cfg.Server.InternalToken)
 	fileHdlr := fileHandler.NewFileHandler(fileService, convSvc)
+
+	var registry *platform.ServiceRegistry
+	var registryStop context.CancelFunc
+	var registryRedisCloser interface{ Close() error }
+	if cfg.Registry.Enabled {
+		registryRedis, redisErr := platform.OpenRedis(cfg)
+		if redisErr != nil {
+			log.Printf("[file-service] service registry unavailable: %v", redisErr)
+		} else {
+			registryRedisCloser = registryRedis
+			registry, registryStop, redisErr = platform.StartServiceRegistration(cfg, registryRedis, "file-service", map[string]string{
+				"domain": "files",
+				"store":  cfg.File.StoreType,
+			})
+			if redisErr != nil {
+				log.Printf("[file-service] register service instance: %v", redisErr)
+			}
+		}
+	}
 
 	r := platform.NewRouter(cfg, "file-service")
 	platform.RegisterHealth(r, "file-service", platform.SQLHealthCheck("postgres", sqlDB))
 	apiV1 := r.Group("/api/v1")
 	fileHdlr.RegisterRoutes(apiV1)
 
-	if err := platform.RunHTTP("file-service", cfg.Services.FilePort, r, nil); err != nil {
+	if err := platform.RunHTTP("file-service", cfg.Services.FilePort, r, func() {
+		if registry != nil {
+			_ = registry.Deregister(context.Background())
+		}
+		if registryStop != nil {
+			registryStop()
+		}
+		if registryRedisCloser != nil {
+			_ = registryRedisCloser.Close()
+		}
+	}); err != nil {
 		log.Fatalf("file service stopped: %v", err)
 	}
 }

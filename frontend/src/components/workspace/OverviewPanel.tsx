@@ -94,6 +94,7 @@ export default function OverviewPanel({
             </button>
           </div>
           <div className="stack-list">
+            {activeTasks.length === 0 ? <div className="empty-panel compact-empty">{text.tasks.empty}</div> : null}
             {activeTasks.slice(0, 4).map((task) => (
               <article key={task.id} className="stack-row">
                 <div>
@@ -117,6 +118,7 @@ export default function OverviewPanel({
             </button>
           </div>
           <div className="stack-list">
+            {upcomingEvents.length === 0 ? <div className="empty-panel compact-empty">{text.schedule.empty}</div> : null}
             {upcomingEvents.map((event) => (
               <article key={event.id} className="stack-row">
                 <div>
@@ -140,6 +142,7 @@ export default function OverviewPanel({
             </button>
           </div>
           <div className="stack-list">
+            {recentDocuments.length === 0 ? <div className="empty-panel compact-empty">{text.files.empty}</div> : null}
             {recentDocuments.map((document) => (
               <article key={document.id} className="stack-row">
                 <div>

@@ -6,34 +6,33 @@ import (
 	"sync"
 )
 
-// Hub WebSocket 连接管理中心
 type Hub struct {
-	// 客户端管理
-	clients    map[int64]*Client  // userID -> Client
-	register   chan *Client       // 注册请求
-	unregister chan *Client       // 注销请求
-	broadcast  chan *BroadcastMsg // 广播消息
+	clients    map[int64]*Client
+	register   chan *Client
+	unregister chan *Client
+	broadcast  chan *BroadcastMsg
 
-	// 房间（会话）管理
-	rooms  map[int64]map[*Client]bool // convID -> 客户端集合
+	rooms  map[int64]map[*Client]bool
 	roomMu sync.RWMutex
 
-	// Hub 状态
 	mu      sync.RWMutex
 	running bool
 	ctx     context.Context
 	cancel  context.CancelFunc
+	cluster clusterRoomBroadcaster
 }
 
-// BroadcastMsg 广播消息结构
+type clusterRoomBroadcaster interface {
+	BroadcastRoom(ctx context.Context, convID int64, fromID int64, content []byte) error
+}
+
 type BroadcastMsg struct {
 	ConvID  int64
-	FromID  int64   // 发送者 userID
-	Content []byte  // WSMessage JSON
-	Exclude *Client // 排除的客户端（不发给自己）
+	FromID  int64
+	Content []byte
+	Exclude *Client
 }
 
-// NewHub 创建 Hub
 func NewHub() *Hub {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Hub{
@@ -48,7 +47,6 @@ func NewHub() *Hub {
 	}
 }
 
-// Run 启动 Hub（阻塞）
 func (h *Hub) Run() {
 	for {
 		select {
@@ -59,22 +57,22 @@ func (h *Hub) Run() {
 			h.clients[client.UserID] = client
 			count := len(h.clients)
 			h.mu.Unlock()
-			log.Printf("[Hub] 用户 %d 已连接 (共 %d 连接)", client.UserID, count)
+			log.Printf("[hub] user %d connected (total=%d)", client.UserID, count)
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[client.UserID]; ok {
 				delete(h.clients, client.UserID)
 				count := len(h.clients)
-				// 从所有房间移除
+
 				h.roomMu.Lock()
 				for convID, members := range h.rooms {
 					if _, exists := members[client]; exists {
 						delete(members, client)
-						log.Printf("[Hub] 用户 %d 离开房间 %d", client.UserID, convID)
+						log.Printf("[hub] user %d left room %d", client.UserID, convID)
 					}
 				}
 				h.roomMu.Unlock()
-				log.Printf("[Hub] 用户 %d 已断开 (共 %d 连接)", client.UserID, count)
+				log.Printf("[hub] user %d disconnected (total=%d)", client.UserID, count)
 			}
 			h.mu.Unlock()
 		case msg := <-h.broadcast:
@@ -83,7 +81,6 @@ func (h *Hub) Run() {
 	}
 }
 
-// Stop 停止 Hub
 func (h *Hub) Stop() {
 	h.cancel()
 	h.mu.Lock()
@@ -91,7 +88,12 @@ func (h *Hub) Stop() {
 	h.mu.Unlock()
 }
 
-// Register 注册客户端
+func (h *Hub) SetClusterBroadcaster(cluster clusterRoomBroadcaster) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.cluster = cluster
+}
+
 func (h *Hub) Register(client *Client) {
 	if !h.isRunning() {
 		return
@@ -99,7 +101,6 @@ func (h *Hub) Register(client *Client) {
 	h.register <- client
 }
 
-// Unregister 注销客户端
 func (h *Hub) Unregister(client *Client) {
 	if !h.isRunning() {
 		return
@@ -107,7 +108,6 @@ func (h *Hub) Unregister(client *Client) {
 	h.unregister <- client
 }
 
-// JoinRoom 加入房间（会话）
 func (h *Hub) JoinRoom(client *Client, convID int64) {
 	h.roomMu.Lock()
 	defer h.roomMu.Unlock()
@@ -115,22 +115,20 @@ func (h *Hub) JoinRoom(client *Client, convID int64) {
 		h.rooms[convID] = make(map[*Client]bool)
 	}
 	h.rooms[convID][client] = true
-	log.Printf("[Hub] 用户 %d 加入房间 %d", client.UserID, convID)
+	log.Printf("[hub] user %d joined room %d", client.UserID, convID)
 }
 
-// LeaveRoom 离开房间
 func (h *Hub) LeaveRoom(client *Client, convID int64) {
 	h.roomMu.Lock()
 	defer h.roomMu.Unlock()
 	if members, ok := h.rooms[convID]; ok {
 		if _, exists := members[client]; exists {
 			delete(members, client)
-			log.Printf("[Hub] 用户 %d 离开房间 %d", client.UserID, convID)
+			log.Printf("[hub] user %d left room %d", client.UserID, convID)
 		}
 	}
 }
 
-// BroadcastToRoom 向房间广播消息
 func (h *Hub) BroadcastToRoom(convID int64, fromID int64, content []byte, exclude *Client) {
 	msg := &BroadcastMsg{
 		ConvID:  convID,
@@ -143,11 +141,20 @@ func (h *Hub) BroadcastToRoom(convID int64, fromID int64, content []byte, exclud
 		return
 	case h.broadcast <- msg:
 	default:
-		log.Printf("[Hub] 广播队列已满 convID=%d", convID)
+		log.Printf("[hub] local broadcast queue full convID=%d", convID)
+	}
+
+	h.mu.RLock()
+	cluster := h.cluster
+	ctx := h.ctx
+	h.mu.RUnlock()
+	if cluster != nil {
+		if err := cluster.BroadcastRoom(ctx, convID, fromID, content); err != nil {
+			log.Printf("[hub] cluster room broadcast failed convID=%d: %v", convID, err)
+		}
 	}
 }
 
-// SendToUser 向指定用户发送消息（如果在线）
 func (h *Hub) SendToUser(userID int64, content []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -156,25 +163,22 @@ func (h *Hub) SendToUser(userID int64, content []byte) {
 	}
 }
 
-// SendToUsers 向多个用户发送消息
 func (h *Hub) SendToUsers(userIDs []int64, content []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	for _, uid := range userIDs {
-		if client, ok := h.clients[uid]; ok {
+	for _, userID := range userIDs {
+		if client, ok := h.clients[userID]; ok {
 			client.Send(content)
 		}
 	}
 }
 
-// GetOnlineCount 获取在线人数
 func (h *Hub) GetOnlineCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
 }
 
-// IsUserOnline 检查用户是否在线
 func (h *Hub) IsUserOnline(userID int64) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -182,7 +186,6 @@ func (h *Hub) IsUserOnline(userID int64) bool {
 	return ok
 }
 
-// deliverMessage 投递消息到房间
 func (h *Hub) deliverMessage(msg *BroadcastMsg) {
 	h.roomMu.RLock()
 	defer h.roomMu.RUnlock()

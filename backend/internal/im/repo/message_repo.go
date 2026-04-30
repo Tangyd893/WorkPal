@@ -25,6 +25,17 @@ func (r *MessageRepo) CreateWithTx(tx *gorm.DB, msg *model.Message) error {
 	return tx.Create(msg).Error
 }
 
+func (r *MessageRepo) GetByIDWithTx(tx *gorm.DB, id int64) (*model.Message, error) {
+	var msg model.Message
+	if err := tx.First(&msg, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.ErrMessageNotFound
+		}
+		return nil, err
+	}
+	return &msg, nil
+}
+
 func (r *MessageRepo) GetByID(ctx context.Context, id int64) (*model.Message, error) {
 	var msg model.Message
 	if err := r.db.WithContext(ctx).First(&msg, id).Error; err != nil {
@@ -75,8 +86,16 @@ func (r *MessageRepo) Update(ctx context.Context, msg *model.Message) error {
 	return r.db.WithContext(ctx).Save(msg).Error
 }
 
+func (r *MessageRepo) UpdateWithTx(tx *gorm.DB, msg *model.Message) error {
+	return tx.Save(msg).Error
+}
+
 func (r *MessageRepo) SoftDelete(ctx context.Context, id int64) error {
 	return r.db.WithContext(ctx).Delete(&model.Message{}, id).Error
+}
+
+func (r *MessageRepo) SoftDeleteWithTx(tx *gorm.DB, id int64) error {
+	return tx.Delete(&model.Message{}, id).Error
 }
 
 func (r *MessageRepo) GetBySender(ctx context.Context, senderID int64, offset, limit int) ([]*model.Message, error) {

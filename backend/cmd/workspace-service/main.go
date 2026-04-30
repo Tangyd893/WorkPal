@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/platform"
@@ -30,12 +31,40 @@ func main() {
 	svc := workspaceService.NewService(repo)
 	handler := workspaceHandler.NewHandler(svc)
 
+	var registry *platform.ServiceRegistry
+	var registryStop context.CancelFunc
+	var registryRedisCloser interface{ Close() error }
+	if cfg.Registry.Enabled {
+		registryRedis, redisErr := platform.OpenRedis(cfg)
+		if redisErr != nil {
+			log.Printf("[workspace-service] service registry unavailable: %v", redisErr)
+		} else {
+			registryRedisCloser = registryRedis
+			registry, registryStop, redisErr = platform.StartServiceRegistration(cfg, registryRedis, "workspace-service", map[string]string{
+				"domain": "workspace",
+			})
+			if redisErr != nil {
+				log.Printf("[workspace-service] register service instance: %v", redisErr)
+			}
+		}
+	}
+
 	r := platform.NewRouter(cfg, "workspace-service")
 	platform.RegisterHealth(r, "workspace-service", platform.SQLHealthCheck("postgres", sqlDB))
 	apiV1 := r.Group("/api/v1")
 	handler.RegisterRoutes(apiV1)
 
-	if err := platform.RunHTTP("workspace-service", cfg.Services.WorkspacePort, r, nil); err != nil {
+	if err := platform.RunHTTP("workspace-service", cfg.Services.WorkspacePort, r, func() {
+		if registry != nil {
+			_ = registry.Deregister(context.Background())
+		}
+		if registryStop != nil {
+			registryStop()
+		}
+		if registryRedisCloser != nil {
+			_ = registryRedisCloser.Close()
+		}
+	}); err != nil {
 		log.Fatalf("workspace service stopped: %v", err)
 	}
 }

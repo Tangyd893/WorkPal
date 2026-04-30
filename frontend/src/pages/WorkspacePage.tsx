@@ -7,7 +7,6 @@ import OverviewPanel from '../components/workspace/OverviewPanel'
 import SchedulePanel from '../components/workspace/SchedulePanel'
 import SettingsDrawer from '../components/workspace/SettingsDrawer'
 import TasksPanel from '../components/workspace/TasksPanel'
-import { buildDocuments } from '../data/workspace'
 import { useAuthStore } from '../hooks/useAuthStore'
 import { usePreferencesStore } from '../hooks/usePreferencesStore'
 import { useI18n } from '../i18n'
@@ -94,16 +93,11 @@ export default function WorkspacePage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [tasks, setTasks] = useState<WorkspaceTask[]>([])
   const [schedule, setSchedule] = useState<ScheduleEvent[]>([])
-  const [seedDocuments, setSeedDocuments] = useState<SharedDocument[]>(() => buildDocuments(locale))
   const [uploadedFiles, setUploadedFiles] = useState<ConversationFile[]>([])
   const [uploadShareCounts, setUploadShareCounts] = useState<Record<number, number>>({})
   const [filesUploading, setFilesUploading] = useState(false)
 
   const activeSection = isWorkspaceSection(section) ? section : null
-
-  useEffect(() => {
-    setSeedDocuments(buildDocuments(locale))
-  }, [locale])
 
   useEffect(() => {
     let disposed = false
@@ -193,11 +187,10 @@ export default function WorkspacePage() {
 
   const documents = useMemo(() => {
     const ownerUsername = currentUser?.username || username || 'admin'
-    return [
-      ...seedDocuments,
-      ...uploadedFiles.map((file) => mapUploadedFileToDocument(file, ownerUsername, uploadShareCounts[file.id] ?? 0, locale)),
-    ].sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
-  }, [currentUser, locale, seedDocuments, uploadShareCounts, uploadedFiles, username])
+    return uploadedFiles
+      .map((file) => mapUploadedFileToDocument(file, ownerUsername, uploadShareCounts[file.id] ?? 0, locale))
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+  }, [currentUser, locale, uploadShareCounts, uploadedFiles, username])
 
   const formattedDate = useMemo(
     () =>
@@ -371,58 +364,40 @@ export default function WorkspacePage() {
   }
 
   const handleDeleteDocument = async (document: SharedDocument) => {
-    if (document.fileId) {
-      try {
-        await workpalApi.deleteFile(document.fileId)
-        setUploadedFiles((currentFiles) => currentFiles.filter((file) => file.id !== document.fileId))
-        notify(document.title)
-      } catch (error) {
-        fail(error instanceof Error ? error.message : 'Unable to delete the file.')
-      }
+    if (!document.fileId) {
       return
     }
 
-    setSeedDocuments((currentDocuments) => currentDocuments.filter((item) => item.id !== document.id))
+    try {
+      await workpalApi.deleteFile(document.fileId)
+      setUploadedFiles((currentFiles) => currentFiles.filter((file) => file.id !== document.fileId))
+      notify(document.title)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to delete the file.')
+    }
   }
 
   const handleShareDocument = async (document: SharedDocument) => {
-    if (document.fileId) {
-      try {
-        const shareInfo = await workpalApi.shareFile(document.fileId)
-        const copied = await copyText(shareInfo.share_text)
-        if (!copied) {
-          fail('Unable to copy the file share link.')
-          return
-        }
+    if (!document.fileId) {
+      return
+    }
 
-        setUploadShareCounts((current) => ({
-          ...current,
-          [document.fileId as number]: (current[document.fileId as number] ?? 0) + 1,
-        }))
-        notify(shareInfo.share_text)
-      } catch (error) {
-        fail(error instanceof Error ? error.message : 'Unable to share the file.')
+    try {
+      const shareInfo = await workpalApi.shareFile(document.fileId)
+      const copied = await copyText(shareInfo.share_text)
+      if (!copied) {
+        fail('Unable to copy the file share link.')
+        return
       }
-      return
-    }
 
-    const copied = await copyText(`${document.title}\n${document.summary}`)
-    if (!copied) {
-      fail('Unable to copy the document summary.')
-      return
+      setUploadShareCounts((current) => ({
+        ...current,
+        [document.fileId as number]: (current[document.fileId as number] ?? 0) + 1,
+      }))
+      notify(shareInfo.share_text)
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'Unable to share the file.')
     }
-
-    setSeedDocuments((currentDocuments) =>
-      currentDocuments.map((item) =>
-        item.id === document.id
-          ? {
-              ...item,
-              sharedCount: item.sharedCount + 1,
-            }
-          : item,
-      ),
-    )
-    notify(document.title)
   }
 
   let sectionContent: JSX.Element

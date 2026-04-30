@@ -8,7 +8,6 @@ import (
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
-	"github.com/Tangyd893/WorkPal/backend/internal/events"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/service"
 	imWS "github.com/Tangyd893/WorkPal/backend/internal/im/ws"
@@ -21,36 +20,44 @@ type MessageHandler struct {
 	convSvc   *service.ConversationService
 	hub       *imWS.Hub
 	searchSvc *searchSvc.SearchService
+	cluster   clusterUserBroadcaster
 }
 
-func NewMessageHandler(msgSvc *service.MessageService, convSvc *service.ConversationService, hub *imWS.Hub, searchSvc *searchSvc.SearchService) *MessageHandler {
+type clusterUserBroadcaster interface {
+	BroadcastUsers(ctx context.Context, userIDs []int64, content []byte) error
+}
+
+type SendReq struct {
+	Type     int8                   `json:"type"`
+	Content  string                 `json:"content"`
+	Metadata map[string]interface{} `json:"metadata"`
+	ReplyTo  int64                  `json:"reply_to"`
+}
+
+func NewMessageHandler(
+	msgSvc *service.MessageService,
+	convSvc *service.ConversationService,
+	hub *imWS.Hub,
+	searchSvc *searchSvc.SearchService,
+	cluster clusterUserBroadcaster,
+) *MessageHandler {
 	return &MessageHandler{
 		msgSvc:    msgSvc,
 		convSvc:   convSvc,
 		hub:       hub,
 		searchSvc: searchSvc,
+		cluster:   cluster,
 	}
 }
 
-// SendReq 发送消息请求
-type SendReq struct {
-	Type     int8                   `json:"type"`     // 消息类型
-	Content  string                 `json:"content"`  // 消息内容
-	Metadata map[string]interface{} `json:"metadata"` // 扩展字段
-	ReplyTo  int64                  `json:"reply_to"` // 回复的消息ID
-}
-
-// GetHistory 获取历史消息（分页）
-// GET /api/v1/conversations/:id/messages
 func (h *MessageHandler) GetHistory(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 
-	// 检查是否是成员
 	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
 	if err != nil {
 		handleServiceErr(c, err)
@@ -78,17 +85,14 @@ func (h *MessageHandler) GetHistory(c *gin.Context) {
 	response.Success(c, msgs)
 }
 
-// Send 发送消息（HTTP 备用）
-// POST /api/v1/conversations/:id/messages
 func (h *MessageHandler) Send(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
 
-	// 检查是否是成员
 	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
 	if err != nil {
 		handleServiceErr(c, err)
@@ -116,7 +120,6 @@ func (h *MessageHandler) Send(c *gin.Context) {
 		return
 	}
 
-	// 通过 WebSocket 广播到房间
 	wsMsg := imWS.NewChatMsg(userID, convID, req.Content, 0)
 	wsMsg.ID = msg.ID
 	wsMsg.CreatedAt = msg.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
@@ -125,22 +128,18 @@ func (h *MessageHandler) Send(c *gin.Context) {
 		h.broadcastToConversation(c.Request.Context(), convID, wsData)
 	}
 
-	// 索引到 Bleve 搜索（非致命，失败不影响消息发送）
 	if h.searchSvc != nil {
 		_ = h.searchSvc.IndexMessage(msg)
 	}
-	_ = events.PublishMessageUpserted(c.Request.Context(), msg)
 
 	response.Success(c, msg)
 }
 
-// Edit 编辑消息
-// PUT /api/v1/messages/:id
 func (h *MessageHandler) Edit(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的消息ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的消息 ID")
 		return
 	}
 
@@ -160,17 +159,14 @@ func (h *MessageHandler) Edit(c *gin.Context) {
 	if h.searchSvc != nil {
 		_ = h.searchSvc.IndexMessage(msg)
 	}
-	_ = events.PublishMessageUpserted(c.Request.Context(), msg)
 	response.Success(c, msg)
 }
 
-// Delete 撤回消息
-// DELETE /api/v1/messages/:id
 func (h *MessageHandler) Delete(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的消息ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的消息 ID")
 		return
 	}
 
@@ -181,21 +177,17 @@ func (h *MessageHandler) Delete(c *gin.Context) {
 	if h.searchSvc != nil {
 		_ = h.searchSvc.DeleteMessage(msgID)
 	}
-	_ = events.PublishMessageDeleted(c.Request.Context(), msgID)
 	response.Success(c, nil)
 }
 
-// MarkRead 标记已读
-// POST /api/v1/messages/:id/read
 func (h *MessageHandler) MarkRead(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的消息ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的消息 ID")
 		return
 	}
 
-	// 获取消息对应的会话
 	msg, err := h.msgSvc.GetByID(c.Request.Context(), msgID)
 	if err != nil {
 		handleServiceErr(c, err)
@@ -218,15 +210,14 @@ func (h *MessageHandler) MarkRead(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// MarkReadAll 标记会话全部已读
-// POST /api/v1/conversations/:id/read-all
 func (h *MessageHandler) MarkReadAll(c *gin.Context) {
 	userID := c.GetInt64("userID")
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话ID")
+		response.FailWithMessage(c, http.StatusBadRequest, "无效的会话 ID")
 		return
 	}
+
 	isMember, err := h.convSvc.IsMember(c.Request.Context(), convID, userID)
 	if err != nil {
 		handleServiceErr(c, err)
@@ -244,7 +235,6 @@ func (h *MessageHandler) MarkReadAll(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// RegisterRoutes 注册路由
 func (h *MessageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	auth := rg.Group("")
 	auth.Use(middleware.AuthRequired())
@@ -257,12 +247,19 @@ func (h *MessageHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (h *MessageHandler) broadcastToConversation(ctx context.Context, convID int64, wsData []byte) {
-	if h.hub == nil {
-		return
-	}
 	members, err := h.convSvc.GetMembers(ctx, convID)
 	if err != nil {
-		h.hub.BroadcastToRoom(convID, 0, wsData, nil)
+		if h.hub != nil {
+			h.hub.BroadcastToRoom(convID, 0, wsData, nil)
+		}
+		return
+	}
+	if h.cluster != nil {
+		if err := h.cluster.BroadcastUsers(ctx, members, wsData); err == nil {
+			return
+		}
+	}
+	if h.hub == nil {
 		return
 	}
 	for _, userID := range members {

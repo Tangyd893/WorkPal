@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/subtle"
+	"net/http"
 	"strings"
 
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
@@ -36,6 +38,24 @@ func AuthRequired() gin.HandlerFunc {
 		// 将用户信息注入 Context，供后续 Handler 使用
 		c.Set("userID", claims.UserID)
 		c.Set("username", claims.Username)
+		c.Next()
+	}
+}
+
+const InternalTokenHeader = "X-Internal-Token"
+
+func InternalTokenRequired(expectedToken string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if expectedToken == "" {
+			response.FailWithMessage(c, http.StatusInternalServerError, "internal token is not configured")
+			c.Abort()
+			return
+		}
+		if subtle.ConstantTimeCompare([]byte(c.GetHeader(InternalTokenHeader)), []byte(expectedToken)) != 1 {
+			response.FailWithMessage(c, http.StatusUnauthorized, "invalid internal token")
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

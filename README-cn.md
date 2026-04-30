@@ -2,39 +2,24 @@
 
 中文说明 | [English](README.md)
 
-WorkPal 是一个基于 Go 与 React 的办公协作平台示例项目。当前版本的后端已经彻底收敛为微服务形态，不再保留单体兼容入口；前端通过 API Gateway 访问后端，各领域服务拥有各自的数据边界。
+WorkPal 是一个基于 Go 和 React 的办公协作项目。当前版本已经按真实微服务形态运行：前端只访问 API Gateway，后端各领域服务拥有各自的运行边界和存储边界。
 
 ## 项目能力
 
-- 预置管理员与员工验收账号
+- 预置验收账号：`admin`、`emma.chen`、`liam.wang`、`sofia.zhao`
 - `English / 简体中文` 双语界面
-- 浅色 / 深色主题、消息提示音开关、密度切换
-- 总览、沟通、任务、日程、文件、通讯录六大板块
+- 深浅色主题、消息提示音开关、界面密度切换
+- 总览、沟通、任务、日程、文件、通讯录六大模块
 - 私聊、群聊、群公告、群文件
-- 后端驱动的通讯录搜索、任务、日程、个人文件
-- API Gateway、领域微服务、Redis Streams、Bleve 搜索链路
+- 后端驱动的任务、日程、文件、通讯录搜索
+- 网关治理、Redis 服务注册发现、IM 跨实例广播、基于 outbox 的 Redis Streams 搜索索引链路
 
 ## 技术栈
 
 - 后端：Go、Gin、GORM、PostgreSQL、Redis、Redis Streams、Bleve
 - 前端：React 18、Vite、TypeScript、Zustand
 - 文件存储：MinIO，带本地文件回退
-- 实时通信：WebSocket
-
-## 环境要求
-
-- Go `1.22+`
-- Node.js `18+`
-- npm
-- Docker Desktop 或 Docker Engine
-
-开始前请先确认 Docker 正在运行：
-
-```powershell
-docker version
-```
-
-只有当输出同时包含 `Client` 和 `Server` 时，才继续后续步骤。
+- 实时通信：WebSocket，IM 服务通过 Redis Pub/Sub 做多实例消息扇出
 
 ## 默认端口
 
@@ -43,7 +28,7 @@ docker version
 | 前端 | `http://localhost:3000` | Vite 开发服务器 |
 | API Gateway | `http://localhost:8080` | 前端唯一后端入口 |
 | User Service | `http://localhost:8081` | 认证、用户、部门、员工档案 |
-| IM Service | `http://localhost:8082` | 会话、消息、WebSocket |
+| IM Service | `http://localhost:8082` | 会话、消息、群公告、WebSocket |
 | File Service | `http://localhost:8083` | 个人文件、群文件 |
 | Search Service | `http://localhost:8084` | 消息搜索与索引 |
 | Workspace Service | `http://localhost:8085` | 任务、日程 |
@@ -52,41 +37,28 @@ docker version
 | MinIO API | `http://localhost:9000` | 对象存储 |
 | MinIO Console | `http://localhost:9001` | `workpal / workpal123456` |
 
-## 后端微服务边界
+## 微服务边界
 
-| 服务 | 存储边界 | 关键职责 |
+| 服务 | 存储边界 | 主要职责 |
 | --- | --- | --- |
-| Gateway | 无状态 | 统一入口、路由目录、服务目录、限流、重试、熔断、健康检查 |
+| Gateway | 无状态 | 统一入口、路由目录、服务目录、注册发现回退、限流、重试、熔断、健康检查 |
 | User Service | `workpal_user` | 登录、用户、部门、员工档案、开发种子数据 |
-| IM Service | `workpal_im` | 私聊、群聊、消息、群公告、WebSocket |
+| IM Service | `workpal_im` | 私聊、群聊、群公告、消息、WebSocket、消息 outbox |
 | File Service | `workpal_file` | 文件元数据、上传、分享、删除 |
-| Search Service | Bleve + Redis Streams | 消息搜索与索引消费 |
+| Search Service | Bleve + Redis Streams | 消息索引与搜索 |
 | Workspace Service | `workpal_workspace` | 任务、日程 |
-
-## Gateway 学习亮点
-
-Gateway 现在不只是一个转发入口，而是微服务入口层的学习样本。它已经具备：
-
-- `/gateway/routes`：查看显式路由目录
-- `/gateway/services`：查看下游服务目录与治理状态
-- `/health/live`：存活检查
-- `/health/ready`：就绪检查
-- `/health`：聚合健康检查
-- 请求 ID 注入
-- 限流
-- 服务级超时
-- 只对幂等读请求启用重试
-- 熔断器
-
-如果你熟悉 Spring Cloud Alibaba，可以把它理解为：
-
-- Gateway：入口层
-- 静态配置驱动的服务目录：轻量版 Nacos 视角
-- 限流 / 重试 / 熔断：轻量版 Sentinel 视角
 
 ## 快速开始
 
-### 1. 用 Docker Compose 启动整套服务
+### 1. 先确认 Docker 正在运行
+
+```powershell
+docker version
+```
+
+只有输出同时包含 `Client` 和 `Server` 时，再继续下面步骤。
+
+### 2. 使用 Docker Compose 启动整套服务
 
 在仓库根目录执行：
 
@@ -101,14 +73,16 @@ docker compose -f docker/docker-compose.yaml ps
 - `postgres`、`redis`、`minio` 为 `Up` 或 `healthy`
 - `gateway`、`user-service`、`im-service`、`file-service`、`search-service`、`workspace-service` 为 `Up`
 
-首次启动时，后端服务会自动创建自己的数据库：
+Compose 会等待 Redis 健康后再启动开启注册发现的后端服务，这样 `/gateway/services` 可以优先看到注册发现实例，而不是一启动就退回静态地址。
+
+后端服务会自动确保自己拥有的数据存储存在：
 
 - `workpal_user`
 - `workpal_im`
 - `workpal_file`
 - `workpal_workspace`
 
-### 2. 如果要逐个调试服务
+### 3. 如果你要逐个调试服务
 
 先只启动基础设施：
 
@@ -116,7 +90,7 @@ docker compose -f docker/docker-compose.yaml ps
 docker compose -f docker/docker-compose.yaml up -d postgres redis minio
 ```
 
-然后在多个终端中分别启动：
+然后在多个终端分别运行：
 
 ```powershell
 cd backend
@@ -148,7 +122,7 @@ cd backend
 go run ./cmd/gateway
 ```
 
-### 3. 启动前端
+### 4. 启动前端
 
 ```powershell
 cd frontend
@@ -156,15 +130,9 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-打开：
-
-```text
-http://localhost:3000
-```
+浏览器访问：`http://localhost:3000`
 
 ## 默认验收账号
-
-默认开发模式下，User Service 会自动确保以下账号存在：
 
 | 角色 | 用户名 | 密码 |
 | --- | --- | --- |
@@ -173,11 +141,7 @@ http://localhost:3000
 | 员工 | `liam.wang` | `workpal123` |
 | 员工 | `sofia.zhao` | `workpal123` |
 
-同时还会补齐部门与员工档案数据，因此通讯录筛选和搜索可以直接使用。
-
-## 快速自检
-
-### Gateway 管理面与健康检查
+## 网关与服务发现自检
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/health/live
@@ -187,38 +151,27 @@ Invoke-RestMethod http://localhost:8080/gateway/routes
 Invoke-RestMethod http://localhost:8080/gateway/services
 ```
 
-预期：
+你应该能看到：
 
-- `live` 返回网关存活
-- `ready` 返回网关和下游服务可接流量
-- `health` 返回聚合健康状态
-- `routes` 返回显式路由目录
-- `services` 返回 5 个下游服务及其超时、重试、熔断信息
+- 网关存活结果
+- 网关及下游服务就绪结果
+- 显式路由目录
+- 带 `discovery_mode`、实例信息、超时、重试和熔断元数据的服务目录
 
-### 登录接口
+## 当前后端链路的关键变化
 
-```powershell
-$body = @{
-  username = "admin"
-  password = "admin123"
-} | ConvertTo-Json
+- 服务启动后会把实例注册到 Redis，Gateway 会优先基于注册表发现下游服务
+- IM 服务使用 Redis Pub/Sub 做跨实例消息广播
+- IM 写消息、编辑消息、撤回消息时，会把待发布事件写入 `message_outbox`
+- 后台 worker 再把 outbox 事件发布到 Redis Streams，Search Service 订阅后更新 Bleve 索引
 
-Invoke-RestMethod `
-  -Uri "http://localhost:8080/api/v1/auth/login" `
-  -Method Post `
-  -ContentType "application/json" `
-  -Body $body
-```
+这意味着搜索索引链路不再是“请求成功后顺手发一下事件”，而是具备了更稳定的最终一致性补偿路径。
 
-预期：
+## 关于当前前端数据形态
 
-- `code` 为 `0`
-- `data.token` 存在
-- 响应头中可看到 `X-Upstream-Service: user-service`
-
-### 前端登录
-
-打开 `http://localhost:3000`，使用 `admin / admin123` 登录，预期会跳转到 `/workspace/overview`。
+- 任务、日程、文件、通讯录都走后端
+- 文件模块主列表不再混入前端写死的演示文档
+- 登录页仍保留预置账号提示，方便验收和调试
 
 ## 测试命令
 
@@ -251,11 +204,7 @@ node ..\testing\e2e\playwright.mjs
 
 - [backend/README.md](backend/README.md)
 - [frontend/README.md](frontend/README.md)
-- [docs/测试手册.md](docs/测试手册.md)
-- [docs/技术选型文档.md](docs/技术选型文档.md)
-- [docs/架构设计.md](docs/架构设计.md)
-- [docs/学习手册.md](docs/学习手册.md)
-
-## License
-
-MIT
+- [测试手册](docs/测试手册.md)
+- [技术选型文档](docs/技术选型文档.md)
+- [架构设计](docs/架构设计.md)
+- [学习手册](docs/学习手册.md)
