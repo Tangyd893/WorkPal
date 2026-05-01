@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { AppTranslations } from '../../i18n'
 import type { Locale, ThemeMode } from '../../types/workspace'
 
@@ -30,16 +31,31 @@ export default function SettingsDrawer({
   onCompactModeChange,
   onReset,
 }: SettingsDrawerProps) {
+  useEffect(() => {
+    if (!open) {
+      return undefined
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose, open])
+
   if (!open) {
     return null
   }
 
   return (
     <div className="drawer-scrim">
-      <aside className="drawer-panel">
+      <aside className="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="settings-drawer-title">
         <div className="drawer-header">
           <div>
-            <h3>{text.settings.title}</h3>
+            <h3 id="settings-drawer-title">{text.settings.title}</h3>
             <p>{text.settings.subtitle}</p>
           </div>
           <button type="button" className="secondary-button" onClick={onClose}>
@@ -56,6 +72,7 @@ export default function SettingsDrawer({
             <button
               type="button"
               className={locale === 'en' ? 'segment-button active' : 'segment-button'}
+              aria-pressed={locale === 'en'}
               onClick={() => onLocaleChange('en')}
             >
               English
@@ -63,6 +80,7 @@ export default function SettingsDrawer({
             <button
               type="button"
               className={locale === 'zh-CN' ? 'segment-button active' : 'segment-button'}
+              aria-pressed={locale === 'zh-CN'}
               onClick={() => onLocaleChange('zh-CN')}
             >
               简体中文
@@ -79,6 +97,7 @@ export default function SettingsDrawer({
             <button
               type="button"
               className={theme === 'light' ? 'segment-button active' : 'segment-button'}
+              aria-pressed={theme === 'light'}
               onClick={() => onThemeChange('light')}
             >
               {text.settings.light}
@@ -86,6 +105,7 @@ export default function SettingsDrawer({
             <button
               type="button"
               className={theme === 'dark' ? 'segment-button active' : 'segment-button'}
+              aria-pressed={theme === 'dark'}
               onClick={() => onThemeChange('dark')}
             >
               {text.settings.dark}
@@ -113,6 +133,7 @@ export default function SettingsDrawer({
             <button
               type="button"
               className={!compactMode ? 'segment-button active' : 'segment-button'}
+              aria-pressed={!compactMode}
               onClick={() => onCompactModeChange(false)}
             >
               {text.settings.comfortable}
@@ -120,6 +141,7 @@ export default function SettingsDrawer({
             <button
               type="button"
               className={compactMode ? 'segment-button active' : 'segment-button'}
+              aria-pressed={compactMode}
               onClick={() => onCompactModeChange(true)}
             >
               {text.settings.compact}

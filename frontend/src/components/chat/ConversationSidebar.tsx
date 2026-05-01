@@ -53,6 +53,7 @@ export default function ConversationSidebar({
                 key={conversation.id}
                 type="button"
                 className={selected ? 'conversation-item active' : 'conversation-item'}
+                aria-pressed={selected}
                 onClick={() => onSelectConversation(conversation)}
               >
                 <div className="conversation-avatar">{conversation.type === 2 ? 'G' : 'D'}</div>

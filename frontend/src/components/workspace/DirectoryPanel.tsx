@@ -49,16 +49,17 @@ export default function DirectoryPanel({
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder={text.directory.searchPlaceholder}
+            aria-label={text.directory.searchPlaceholder}
           />
         </div>
       </div>
 
-      <div className="banner-info">{text.directory.searchHint}</div>
+      <div className="banner-info" role="status">{text.directory.searchHint}</div>
 
       {loading ? (
-        <div className="empty-panel">{text.common.loading}</div>
+        <div className="empty-panel" role="status">{text.common.loading}</div>
       ) : users.length === 0 ? (
-        <div className="empty-panel">{text.directory.noResults}</div>
+        <div className="empty-panel" role="status">{text.directory.noResults}</div>
       ) : (
         <div className="directory-grid">
           {users.map((user) => {

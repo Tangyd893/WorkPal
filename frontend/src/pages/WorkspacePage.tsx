@@ -489,12 +489,13 @@ export default function WorkspacePage() {
           <span>{t.shell.subtitle}</span>
         </div>
 
-        <nav className="workspace-nav">
+        <nav className="workspace-nav" aria-label={t.common.workpal}>
           {sectionOrder.map((item) => (
             <button
               key={item}
               type="button"
               className={item === activeSection ? 'nav-button active' : 'nav-button'}
+              aria-current={item === activeSection ? 'page' : undefined}
               onClick={() => navigate(`/workspace/${item}`)}
             >
               <span>{t.navigation[item]}</span>
@@ -513,7 +514,7 @@ export default function WorkspacePage() {
         </div>
       </aside>
 
-      <div className="workspace-main">
+      <main className="workspace-main">
         <header className="workspace-topbar">
           <div>
             <span className="eyebrow">
@@ -528,6 +529,7 @@ export default function WorkspacePage() {
               <button
                 type="button"
                 className={locale === 'en' ? 'segment-button active' : 'segment-button'}
+                aria-pressed={locale === 'en'}
                 onClick={() => setLocale('en')}
               >
                 English
@@ -535,6 +537,7 @@ export default function WorkspacePage() {
               <button
                 type="button"
                 className={locale === 'zh-CN' ? 'segment-button active' : 'segment-button'}
+                aria-pressed={locale === 'zh-CN'}
                 onClick={() => setLocale('zh-CN')}
               >
                 简体中文
@@ -545,6 +548,7 @@ export default function WorkspacePage() {
               <button
                 type="button"
                 className={theme === 'light' ? 'segment-button active' : 'segment-button'}
+                aria-pressed={theme === 'light'}
                 onClick={() => setTheme('light')}
               >
                 {t.settings.light}
@@ -552,6 +556,7 @@ export default function WorkspacePage() {
               <button
                 type="button"
                 className={theme === 'dark' ? 'segment-button active' : 'segment-button'}
+                aria-pressed={theme === 'dark'}
                 onClick={() => setTheme('dark')}
               >
                 {t.settings.dark}
@@ -568,13 +573,13 @@ export default function WorkspacePage() {
         </header>
 
         <div className="workspace-content">
-          {loadError ? <div className="banner-error">{loadError}</div> : null}
-          {actionError ? <div className="banner-error">{actionError}</div> : null}
-          {actionNotice ? <div className="banner-info">{actionNotice}</div> : null}
-          {!loading && teamMembers.length === 0 ? <div className="banner-info">{t.overview.noUsers}</div> : null}
-          {loading ? <div className="module-surface empty-panel">{t.common.loading}</div> : sectionContent}
+          {loadError ? <div className="banner-error" role="alert">{loadError}</div> : null}
+          {actionError ? <div className="banner-error" role="alert">{actionError}</div> : null}
+          {actionNotice ? <div className="banner-info" role="status">{actionNotice}</div> : null}
+          {!loading && teamMembers.length === 0 ? <div className="banner-info" role="status">{t.overview.noUsers}</div> : null}
+          {loading ? <div className="module-surface empty-panel" role="status">{t.common.loading}</div> : sectionContent}
         </div>
-      </div>
+      </main>
 
       <SettingsDrawer
         open={drawerOpen}

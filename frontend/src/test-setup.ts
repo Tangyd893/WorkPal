@@ -3,7 +3,12 @@
 // Mock localStorage for Node.js test environment
 const store: Record<string, string> = {}
 
-Object.defineProperty(global, 'localStorage', {
+Object.defineProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT', {
+  value: true,
+  writable: true,
+})
+
+Object.defineProperty(globalThis, 'localStorage', {
   value: {
     getItem: (key: string) => store[key] ?? null,
     setItem: (key: string, value: string) => { store[key] = value },

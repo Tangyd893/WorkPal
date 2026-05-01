@@ -8,7 +8,7 @@
 |------|---------|---------|
 | 后端 CRUD（Repo/Service/Handler）| ~95% | 错误处理、并发加固、接口抽象 |
 | WebSocket Hub | ~80% | Mutex 细化、投递链路、Origin 校验、race 检测 |
-| 前端页面组件 | ~90% | Zustand store 重构、统一响应解包、消息去重 |
+| 前端页面组件 | ~90% | Zustand store 重构、统一响应解包、消息去重、可访问性语义 |
 | 配置文件生成 | ~60% | YAML key 映射、默认配置路径、样例配置 |
 | 基础设施（Docker/CI）| ~60% | GitHub Actions 配置、docker-compose 整理、npm 工具链统一、Compose 配置校验 |
 
@@ -200,4 +200,4 @@ request.interceptors.response.use((res) => {
 需求 → AI 生成初稿 → 人工 Review（重点：安全+并发+权限）→ gofmt/lint/test/race → 文档同步 → 提交
 ```
 
-目前 WorkPal 的单测（`auth_svc`、`message_svc`、`conversation_svc`、`presence_svc`、文件服务、搜索服务、Hub 并发）以人工事后补充和修正为主。普通 `go test ./...` 可作为本地基础验证，`go test -race ./...` 建议在 Linux CI 或本机可用 race detector 的环境中运行。GitHub Actions 当前覆盖后端构建、`go vet`、golangci-lint、race 测试、前端单元测试、前端生产构建和 Docker Compose 配置校验。
+目前 WorkPal 的单测（`auth_svc`、`message_svc`、`conversation_svc`、`presence_svc`、文件服务、搜索服务、Hub 并发）以人工事后补充和修正为主。普通 `go test ./...` 可作为本地基础验证，`go test -race ./...` 建议在 Linux CI 或本机可用 race detector 的环境中运行。GitHub Actions 当前覆盖后端构建、`go vet`、golangci-lint、race 测试、前端 lint、前端单元与组件测试、前端生产构建和 Docker Compose 配置校验。

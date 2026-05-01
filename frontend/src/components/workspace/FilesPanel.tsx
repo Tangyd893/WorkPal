@@ -41,17 +41,29 @@ export default function FilesPanel({ documents, text, getDisplayName, uploading,
           <h2>{text.files.title}</h2>
           <p>{text.files.subtitle}</p>
         </div>
-        <button type="button" className="primary-button" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          aria-busy={uploading}
+        >
           {uploading ? text.common.loading : text.files.uploadAction}
         </button>
       </div>
 
-      <input ref={fileInputRef} type="file" className="visually-hidden" onChange={(event) => void handleFileChange(event)} />
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="visually-hidden"
+        aria-label={text.files.uploadAction}
+        onChange={(event) => void handleFileChange(event)}
+      />
 
-      <div className="banner-info">{text.files.uploadHint}</div>
+      <div className="banner-info" role="status">{text.files.uploadHint}</div>
 
       {documents.length === 0 ? (
-        <div className="empty-panel">{text.files.empty}</div>
+        <div className="empty-panel" role="status">{text.files.empty}</div>
       ) : (
         <div className="list-grid">
           {documents.map((document) => (
@@ -90,7 +102,7 @@ export default function FilesPanel({ documents, text, getDisplayName, uploading,
 
               <div className="task-actions">
                 {document.attachmentUrl ? (
-                  <a className="secondary-button button-link" href={document.attachmentUrl} target="_blank" rel="noreferrer">
+                  <a className="secondary-button button-link" href={document.attachmentUrl} target="_blank" rel="noreferrer noopener">
                     {text.files.openAction}
                   </a>
                 ) : null}

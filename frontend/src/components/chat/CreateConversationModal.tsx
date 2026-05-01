@@ -107,10 +107,10 @@ export default function CreateConversationModal({
 
   return (
     <div className="dialog-scrim">
-      <div className="dialog-panel">
+      <div className="dialog-panel" role="dialog" aria-modal="true" aria-labelledby="create-conversation-title">
         <div className="dialog-header">
           <div>
-            <h3>{labels.createTitle}</h3>
+            <h3 id="create-conversation-title">{labels.createTitle}</h3>
             <p>{labels.createSubtitle}</p>
           </div>
         </div>
@@ -119,6 +119,7 @@ export default function CreateConversationModal({
           <button
             type="button"
             className={mode === 'private' ? 'segment-button active' : 'segment-button'}
+            aria-pressed={mode === 'private'}
             onClick={() => setMode('private')}
           >
             {labels.direct}
@@ -126,6 +127,7 @@ export default function CreateConversationModal({
           <button
             type="button"
             className={mode === 'group' ? 'segment-button active' : 'segment-button'}
+            aria-pressed={mode === 'group'}
             onClick={() => setMode('group')}
           >
             {labels.group}
@@ -149,6 +151,7 @@ export default function CreateConversationModal({
                     key={user.id}
                     type="button"
                     className={selected ? 'choice-card selected' : 'choice-card'}
+                    aria-pressed={selected}
                     onClick={() => setSelectedDirectUserId(user.id)}
                   >
                     <div>
@@ -186,6 +189,7 @@ export default function CreateConversationModal({
                     key={user.id}
                     type="button"
                     className={selected ? 'choice-card selected' : 'choice-card'}
+                    aria-pressed={selected}
                     onClick={() => toggleGroupMember(user.id)}
                   >
                     <div>
@@ -200,7 +204,7 @@ export default function CreateConversationModal({
           </div>
         )}
 
-        {error ? <div className="error-msg">{error}</div> : null}
+        {error ? <div className="error-msg" role="alert">{error}</div> : null}
 
         <div className="dialog-actions">
           <button type="button" className="secondary-button" onClick={onClose}>

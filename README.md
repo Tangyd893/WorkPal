@@ -209,13 +209,14 @@ go test ./...
 
 ```powershell
 cd frontend
+npm run lint
 npm test
 npm run build
 ```
 
 ### Continuous integration
 
-GitHub Actions runs on pushes and pull requests to `main`. The current workflow validates backend build, `go vet`, golangci-lint, race-enabled Go tests, frontend unit tests, frontend production build, and Docker Compose configuration.
+GitHub Actions runs on pushes and pull requests to `main`. The current workflow validates backend build, `go vet`, golangci-lint, race-enabled Go tests, frontend lint, frontend unit and component tests, frontend production build, and Docker Compose configuration.
 
 ### End-to-end smoke test
 

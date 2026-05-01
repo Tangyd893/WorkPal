@@ -51,6 +51,7 @@ export default function LoginPage() {
           <button
             type="button"
             className={locale === 'en' ? 'segment-button active' : 'segment-button'}
+            aria-pressed={locale === 'en'}
             onClick={() => setLocale('en')}
           >
             English
@@ -58,6 +59,7 @@ export default function LoginPage() {
           <button
             type="button"
             className={locale === 'zh-CN' ? 'segment-button active' : 'segment-button'}
+            aria-pressed={locale === 'zh-CN'}
             onClick={() => setLocale('zh-CN')}
           >
             简体中文
@@ -68,6 +70,7 @@ export default function LoginPage() {
           <button
             type="button"
             className={theme === 'light' ? 'segment-button active' : 'segment-button'}
+            aria-pressed={theme === 'light'}
             onClick={() => setTheme('light')}
           >
             {t.settings.light}
@@ -75,6 +78,7 @@ export default function LoginPage() {
           <button
             type="button"
             className={theme === 'dark' ? 'segment-button active' : 'segment-button'}
+            aria-pressed={theme === 'dark'}
             onClick={() => setTheme('dark')}
           >
             {t.settings.dark}
@@ -89,12 +93,13 @@ export default function LoginPage() {
             <p>{t.login.subtitle}</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="form-stack">
+          <form onSubmit={handleSubmit} className="form-stack" aria-busy={loading}>
             <div className="form-item">
               <label htmlFor="username">{t.login.username}</label>
               <input
                 id="username"
                 type="text"
+                autoComplete="username"
                 value={form.username}
                 onChange={(event) => setForm((current) => ({ ...current, username: event.target.value }))}
                 placeholder={t.login.usernamePlaceholder}
@@ -107,6 +112,7 @@ export default function LoginPage() {
               <input
                 id="password"
                 type="password"
+                autoComplete="current-password"
                 value={form.password}
                 onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
                 placeholder={t.login.passwordPlaceholder}
@@ -114,7 +120,7 @@ export default function LoginPage() {
               />
             </div>
 
-            {error ? <div className="error-msg">{error}</div> : null}
+            {error ? <div className="error-msg" role="alert">{error}</div> : null}
 
             <button type="submit" className="primary-button block-button" disabled={loading}>
               {loading ? t.login.signingIn : t.login.signIn}
@@ -141,6 +147,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   className="secondary-button"
+                  aria-label={`${t.login.useAccount}: ${account.username}`}
                   onClick={() => setForm({ username: account.username, password: account.password })}
                 >
                   {t.login.useAccount}

@@ -100,7 +100,7 @@ export default function TasksPanel({
         </button>
       </div>
 
-      <div className="banner-info">{text.tasks.addHint}</div>
+      <div className="banner-info" role="status">{text.tasks.addHint}</div>
 
       {formOpen ? (
         <section className="data-card">

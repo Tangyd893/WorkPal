@@ -15,6 +15,8 @@ That means the frontend stays stable even though the backend is split into multi
 
 ## Start the frontend
 
+The frontend uses npm as the only package manager. Keep `package-lock.json` as the dependency lock file and install with `npm ci`.
+
 ```powershell
 cd frontend
 npm ci
@@ -59,8 +61,9 @@ After login, the app routes into a workspace shell with these modules:
 - `src/api`: API wrappers and response unwrapping
 - `src/hooks`: auth, preferences, and chat controller state
 - `src/types`: shared TypeScript models
-- `src/data`: seeded display data still used by overview summaries and knowledge cards
+- `src/data`: seeded login account display data
 - `src/styles`: global styles
+- `src/test`: small React/Vitest render helpers used by component tests
 
 ## Backend-backed vs display-only data
 
@@ -80,12 +83,22 @@ After login, the app routes into a workspace shell with these modules:
 ### Display-only right now
 
 - overview summary composition
-- seeded knowledge cards inside the files module
+
+## Non-functional baseline
+
+- package management is npm-only
+- ESLint is configured for `src`, `vite.config.ts`, and `vitest.config.ts`
+- Vitest covers API response unwrapping, auth/chat stores, preference persistence, i18n, login form semantics, settings drawer semantics, and file upload panel behavior
+- error banners use `role="alert"`; loading and informational banners use `role="status"`
+- modal surfaces use dialog semantics, and the settings drawer closes on Escape
+- segmented controls and selectable cards expose their selected state with ARIA attributes
+- global styles include keyboard `focus-visible` treatment and reduced-motion support
 
 ## Tests
 
 ```powershell
 cd frontend
+npm run lint
 npm test
 npm run build
 ```

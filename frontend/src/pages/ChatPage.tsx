@@ -23,15 +23,15 @@ export default function ChatPage({ teamMembers, text }: ChatPageProps) {
           <p>{text.chat.subtitle}</p>
         </div>
         <div className="status-row">
-          <span className={chat.connected ? 'status-badge positive' : 'status-badge critical'}>
+          <span className={chat.connected ? 'status-badge positive' : 'status-badge critical'} role="status">
             {chat.connected ? text.chat.connectionOn : text.chat.connectionOff}
           </span>
           <span className="subtle-label">{chat.username || text.common.unavailable}</span>
         </div>
       </div>
 
-      {chat.error ? <div className="banner-error">{chat.error}</div> : null}
-      {chat.notice ? <div className="banner-info">{chat.notice}</div> : null}
+      {chat.error ? <div className="banner-error" role="alert">{chat.error}</div> : null}
+      {chat.notice ? <div className="banner-info" role="status">{chat.notice}</div> : null}
 
       <div className={showGroupDetails ? 'chat-layout with-details' : 'chat-layout'}>
         <ConversationSidebar

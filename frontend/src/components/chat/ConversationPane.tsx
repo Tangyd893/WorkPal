@@ -65,11 +65,11 @@ export default function ConversationPane({
   }
 
   if (!conversation) {
-    return <main className="conversation-pane empty-panel">{labels.selectConversation}</main>
+    return <section className="conversation-pane empty-panel">{labels.selectConversation}</section>
   }
 
   return (
-    <main className="conversation-pane">
+    <section className="conversation-pane">
       <div className="conversation-toolbar">
         <div className="conversation-heading">
           <h3>{getConversationTitle(conversation, labels)}</h3>
@@ -88,6 +88,7 @@ export default function ConversationPane({
             value={searchQuery}
             onChange={(event) => onSearchChange(event.target.value)}
             placeholder={labels.searchPlaceholder}
+            aria-label={labels.searchPlaceholder}
           />
           <button type="submit" className="secondary-button">
             {labels.searchAction}
@@ -100,11 +101,11 @@ export default function ConversationPane({
         </form>
       </div>
 
-      <div className="message-stream">
-        {searching ? <div className="empty-panel">{labels.searching}</div> : null}
+      <div className="message-stream" aria-live="polite">
+        {searching ? <div className="empty-panel" role="status">{labels.searching}</div> : null}
 
         {!searching && messages.length === 0 ? (
-          <div className="empty-panel">{searchActive ? labels.noSearchResults : labels.noMessages}</div>
+          <div className="empty-panel" role="status">{searchActive ? labels.noSearchResults : labels.noMessages}</div>
         ) : null}
 
         {messages.map((message) => {
@@ -132,6 +133,7 @@ export default function ConversationPane({
             void handleInputKeyDown(event)
           }}
           placeholder={labels.writeMessage}
+          aria-label={labels.writeMessage}
         />
         <button
           type="button"
@@ -143,6 +145,6 @@ export default function ConversationPane({
           {labels.send}
         </button>
       </div>
-    </main>
+    </section>
   )
 }
