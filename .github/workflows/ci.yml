@@ -53,6 +53,10 @@ jobs:
         working-directory: ./backend
         run: go build -v ./...
 
+      - name: Vet
+        working-directory: ./backend
+        run: go vet ./...
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
@@ -87,4 +91,16 @@ jobs:
         working-directory: ./frontend
         run: npm test
 
+      - name: Build
+        working-directory: ./frontend
+        run: npm run build
+
       # E2E tests use OpenClaw skill; project-level Playwright tests TBD
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Docker Compose config
+        run: docker compose -f docker/docker-compose.yaml config --quiet

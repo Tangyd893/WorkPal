@@ -213,6 +213,10 @@ npm test
 npm run build
 ```
 
+### Continuous integration
+
+GitHub Actions runs on pushes and pull requests to `main`. The current workflow validates backend build, `go vet`, golangci-lint, race-enabled Go tests, frontend unit tests, frontend production build, and Docker Compose configuration.
+
 ### End-to-end smoke test
 
 Make sure backend and frontend are already running, then execute:

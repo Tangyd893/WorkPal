@@ -190,6 +190,10 @@ npm test
 npm run build
 ```
 
+### 持续集成
+
+GitHub Actions 会在推送到 `main` 和向 `main` 发起 Pull Request 时运行。当前流程会校验后端构建、`go vet`、golangci-lint、开启 race detector 的 Go 测试、前端单元测试、前端生产构建和 Docker Compose 配置。
+
 ### 端到端烟测
 
 确保前后端都已启动，再执行：
