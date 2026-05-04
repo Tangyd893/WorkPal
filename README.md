@@ -1,87 +1,67 @@
 # WorkPal
 
-[中文说明](README-cn.md) | English
+[English](README-en.md) | 中文说明
 
-WorkPal is a Go + React office collaboration platform running as a real microservice system. The frontend communicates exclusively through the API gateway, while each backend domain service owns its own runtime and storage boundary.
+WorkPal 是一个基于 Go 和 React 的办公协作平台。当前版本已经按真实微服务形态运行：前端只访问 API Gateway，后端各领域服务拥有各自的运行边界和存储边界。
 
-## What is in the project
+## 项目能力
 
-- seeded acceptance accounts: `admin`, `emma.chen`, `liam.wang`, `sofia.zhao`
-- bilingual UI: `English / 简体中文`
-- light and dark theme, message sound toggle, density toggle
-- overview, chat, tasks, schedule, files, and directory modules
-- direct chat, group chat, group announcements, group files
-- message editing, message recall, and inline editing in the chat pane
-- backend-backed tasks, schedule, files, and directory search
-- gateway governance, Redis-backed service registry, Redis-backed IM cluster fanout, outbox-backed Redis Streams search indexing
-- versioned database migrations for all four domain services
+- 预置验收账号：`admin`、`emma.chen`、`liam.wang`、`sofia.zhao`
+- `English / 简体中文` 双语界面
+- 深浅色主题、消息提示音开关、界面密度切换
+- 总览、沟通、任务、日程、文件、通讯录六大模块
+- 私聊、群聊、群公告、群文件
+- 消息编辑、消息撤回、行内编辑
+- 后端驱动的任务、日程、文件、通讯录搜索
+- 网关治理、Redis 服务注册发现、IM 跨实例广播、基于 outbox 的 Redis Streams 搜索索引链路
+- 四个领域服务的版本化数据库迁移体系
 
-## Stack
+## 技术栈
 
-- **Backend:** Go 1.22, Gin, GORM, PostgreSQL 16, Redis 7, Redis Streams, Bleve, golang-migrate
-- **Frontend:** React 18, Vite 5, TypeScript 5.4, Zustand 4.5
-- **File storage:** MinIO with local-file fallback
-- **Realtime:** WebSocket through the IM service, with Redis Pub/Sub fanout for multi-instance delivery
+- **后端：** Go 1.22、Gin、GORM、PostgreSQL 16、Redis 7、Redis Streams、Bleve、golang-migrate
+- **前端：** React 18、Vite 5、TypeScript 5.4、Zustand 4.5
+- **文件存储：** MinIO，带本地文件回退
+- **实时通信：** WebSocket，IM 服务通过 Redis Pub/Sub 做多实例消息扇出
 
-## Ports
+## 默认端口
 
-| Component | URL | Notes |
+| 组件 | 地址 | 说明 |
 | --- | --- | --- |
-| Frontend | `http://localhost:3000` | Vite dev server |
-| API Gateway | `http://localhost:8080` | the only backend URL the frontend uses |
-| User Service | `http://localhost:8081` | auth, users, departments, employees |
-| IM Service | `http://localhost:8082` | conversations, messages, WebSocket |
-| File Service | `http://localhost:8083` | personal files and group files |
-| Search Service | `http://localhost:8084` | message indexing and search |
-| Workspace Service | `http://localhost:8085` | tasks and schedule |
+| 前端 | `http://localhost:3000` | Vite 开发服务器 |
+| API Gateway | `http://localhost:8080` | 前端唯一后端入口 |
+| User Service | `http://localhost:8081` | 认证、用户、部门、员工档案 |
+| IM Service | `http://localhost:8082` | 会话、消息、群公告、WebSocket |
+| File Service | `http://localhost:8083` | 个人文件、群文件 |
+| Search Service | `http://localhost:8084` | 消息搜索与索引 |
+| Workspace Service | `http://localhost:8085` | 任务、日程 |
 | PostgreSQL | `localhost:5432` | `workpal / workpal123` |
-| Redis | `localhost:6379` | default no password |
-| MinIO API | `http://localhost:9000` | object storage |
+| Redis | `localhost:6379` | 默认无密码 |
+| MinIO API | `http://localhost:9000` | 对象存储 |
 | MinIO Console | `http://localhost:9001` | `workpal / workpal123456` |
 
-## Microservice topology
+## 微服务边界
 
-| Service | Storage boundary | Main responsibility |
+| 服务 | 存储边界 | 主要职责 |
 | --- | --- | --- |
-| Gateway | stateless | ingress, route catalog, service catalog, service discovery fallback, rate limit, retry, circuit breaker, health |
-| User Service | `workpal_user` | login, users, departments, employees, development seed data |
-| IM Service | `workpal_im` | direct chat, group chat, announcements, messages, message edit/recall, WebSocket, Redis fanout, message outbox |
-| File Service | `workpal_file` | file metadata, upload, share, delete |
-| Search Service | Bleve + Redis Streams | message indexing and search |
-| Workspace Service | `workpal_workspace` | tasks and schedule |
+| Gateway | 无状态 | 统一入口、路由目录、服务目录、注册发现回退、限流、重试、熔断、健康检查 |
+| User Service | `workpal_user` | 登录、用户、部门、员工档案、开发种子数据 |
+| IM Service | `workpal_im` | 私聊、群聊、群公告、消息、消息编辑/撤回、WebSocket、消息 outbox |
+| File Service | `workpal_file` | 文件元数据、上传、分享、删除 |
+| Search Service | Bleve + Redis Streams | 消息索引与搜索 |
+| Workspace Service | `workpal_workspace` | 任务、日程 |
 
-## Gateway learning surface
+## 数据库迁移
 
-Gateway exposes:
+每个服务在 `backend/migrations/<service>/` 下配有版本化 SQL 迁移：
 
-- `GET /health/live`
-- `GET /health/ready`
-- `GET /health`
-- `GET /gateway/routes`
-- `GET /gateway/services`
-
-Gateway implements:
-
-- request ID propagation
-- explicit route catalog
-- Redis-backed service discovery with static-config fallback
-- service-level timeouts
-- retries for idempotent read requests only
-- per-service circuit breakers
-- in-memory rate limiting
-
-## Database migrations
-
-Each service has versioned SQL migrations under `backend/migrations/<service>/`:
-
-| Service | Migration | Tables |
+| 服务 | 迁移 | 表 |
 | --- | --- | --- |
 | user-service | `001_init` | `users`, `departments`, `employees` |
 | im-service | `001_init` | `conversations`, `conversation_members`, `messages`, `message_outbox`, `message_reads` |
 | file-service | `001_init` | `files` |
 | workspace-service | `001_init` | `tasks`, `schedule_events` |
 
-Run migrations manually:
+手动运行迁移：
 
 ```powershell
 cd backend
@@ -90,114 +70,75 @@ make migrate-up SERVICE=user-service
 make migrate-down SERVICE=user-service
 ```
 
-Or create new migrations:
+创建新迁移：
 
 ```powershell
 make migrate-create SERVICE=im-service NAME=add_message_attachments
 ```
 
-## Microservice learning mapping
+## 快速开始
 
-If you are learning from a Spring Cloud Alibaba perspective, the current Go project maps roughly like this:
+### 环境要求
 
-- Spring Cloud Gateway -> `backend/cmd/gateway`
-- Nacos-like service registry -> Redis-backed registrations in `backend/internal/platform/registry.go`
-- Sentinel-like ingress governance -> gateway rate limit, retry, breaker, readiness checks
-- Feign-like service calls -> `backend/internal/clients/*`
-- RocketMQ-like async search update path -> IM outbox plus Redis Streams into Search
+> 以下命令在 Windows 和 Linux 环境下均可使用。Windows 需安装 Docker Desktop，Linux 安装 Docker Engine 配合 Compose 插件即可。
 
-## Quick start
+| 工具    | 最低版本 | 用途                                 |
+| ------- | -------- | ------------------------------------ |
+| Docker  | 20.10+   | PostgreSQL、Redis、MinIO 容器运行    |
+| Go      | 1.22+    | 后端服务                             |
+| Node.js | 18.x+    | 前端构建与开发服务器                 |
+| npm     | 9.x+     | 前端包管理                           |
 
-### 1. Make sure Docker is running
+一条命令检查所有必需工具：
 
-```powershell
-docker version
+```bash
+docker --version && go version && node --version && npm --version
 ```
 
-Continue only when the output contains both `Client` and `Server`.
+### 启动完整技术栈
 
-### 2. Start the full stack with Docker Compose
-
-From the repo root:
-
-```powershell
+```bash
 docker compose -f docker/docker-compose.yaml build
 docker compose -f docker/docker-compose.yaml up -d
-docker compose -f docker/docker-compose.yaml ps
 ```
 
-Expected result:
+### 启动前端
 
-- `postgres`, `redis`, and `minio` are `Up` or `healthy`
-- `gateway`, `user-service`, `im-service`, `file-service`, `search-service`, and `workspace-service` are `Up`
-
-Each backend service automatically ensures the databases it owns exist:
-
-- `workpal_user`
-- `workpal_im`
-- `workpal_file`
-- `workpal_workspace`
-
-### 3. Start services from source for debugging
-
-Start infrastructure only:
-
-```powershell
-docker compose -f docker/docker-compose.yaml up -d postgres redis minio
-```
-
-Then run these in separate terminals:
-
-```powershell
-cd backend
-go run ./cmd/user-service
-```
-
-```powershell
-cd backend
-go run ./cmd/im-service
-```
-
-```powershell
-cd backend
-go run ./cmd/file-service
-```
-
-```powershell
-cd backend
-go run ./cmd/search-service
-```
-
-```powershell
-cd backend
-go run ./cmd/workspace-service
-```
-
-```powershell
-cd backend
-go run ./cmd/gateway
-```
-
-### 4. Start the frontend
-
-```powershell
+```bash
 cd frontend
 npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Then open `http://localhost:3000`.
+浏览器访问 `http://localhost:3000`，验收账号见下方。
 
-## Acceptance accounts
+### 逐个调试服务（可选）
 
-| Role | Username | Password |
+先启动基础设施，再分别在独立终端运行各服务：
+
+```bash
+docker compose -f docker/docker-compose.yaml up -d postgres redis minio
+```
+
+```bash
+cd backend && go run ./cmd/user-service
+cd backend && go run ./cmd/im-service
+cd backend && go run ./cmd/file-service
+cd backend && go run ./cmd/search-service
+cd backend && go run ./cmd/workspace-service
+cd backend && go run ./cmd/gateway
+```
+
+## 默认验收账号
+
+| 角色 | 用户名 | 密码 |
 | --- | --- | --- |
-| Admin | `admin` | `admin123` |
-| Employee | `emma.chen` | `workpal123` |
-| Employee | `liam.wang` | `workpal123` |
-| Employee | `sofia.zhao` | `workpal123` |
+| 管理员 | `admin` | `admin123` |
+| 员工 | `emma.chen` | `workpal123` |
+| 员工 | `liam.wang` | `workpal123` |
+| 员工 | `sofia.zhao` | `workpal123` |
 
-## Quick verification
+## 网关与服务发现自检
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/health/live
@@ -207,23 +148,30 @@ Invoke-RestMethod http://localhost:8080/gateway/routes
 Invoke-RestMethod http://localhost:8080/gateway/services
 ```
 
-You should see:
+你应该能看到：
 
-- gateway liveness
-- gateway readiness across downstream services
-- explicit route catalog
-- service catalog with discovery mode, discovered instances, timeout, retry, and breaker metadata
+- 网关存活结果
+- 网关及下游服务就绪结果
+- 显式路由目录
+- 带 `discovery_mode`、实例信息、超时、重试和熔断元数据的服务目录
 
-## Notes about current frontend data
+## 当前后端链路的关键变化
 
-- tasks, schedule, files, chat, and directory are backend-backed
-- message editing, recall, and mark-read are supported via the IM API
-- the files module no longer mixes frontend-only seeded documents into the main document list
-- seeded accounts remain intentionally exposed on the login screen for acceptance and debugging
+- 服务启动后会把实例注册到 Redis，Gateway 会优先基于注册表发现下游服务
+- IM 服务使用 Redis Pub/Sub 做跨实例消息广播
+- IM 写消息、编辑消息、撤回消息时，会把待发布事件写入 `message_outbox`
+- 后台 worker 再把 outbox 事件发布到 Redis Streams，Search Service 订阅后更新 Bleve 索引
 
-## Tests
+## 关于当前前端数据形态
 
-### Backend
+- 任务、日程、文件、沟通、通讯录都走后端
+- 消息支持编辑与撤回，编辑采用行内模式
+- 文件模块主列表不再混入前端写死的演示文档
+- 登录页仍保留预置账号提示，方便验收和调试
+
+## 测试命令
+
+### 后端
 
 ```powershell
 cd backend
@@ -231,7 +179,7 @@ go vet ./...
 go test -race ./...
 ```
 
-### Frontend
+### 前端
 
 ```powershell
 cd frontend
@@ -240,18 +188,18 @@ npm test
 npm run build
 ```
 
-### Continuous integration
+### 持续集成
 
-GitHub Actions runs on pushes and pull requests to `main`. The pipeline includes:
+GitHub Actions 会在推送到 `main` 和向 `main` 发起 Pull Request 时运行。流水线包括：
 
-- **Backend:** build, `go vet`, `golangci-lint`, race-enabled Go tests
-- **Frontend:** TypeScript type check, ESLint, Vitest component tests, production build
-- **E2E:** starts Compose services, runs Playwright API smoke tests (health, login, chat)
-- **Compose:** Docker Compose configuration validation
+- **后端：** 构建、`go vet`、`golangci-lint`、带 race 检测的 Go 测试
+- **前端：** TypeScript 类型检查、ESLint、Vitest 组件测试、生产构建
+- **端到端：** 启动 Compose 服务，运行 Playwright API 烟雾测试（健康检查、登录、聊天）
+- **Compose：** Docker Compose 配置校验
 
-### End-to-end smoke test
+### 端到端烟测
 
-Make sure backend and frontend are already running, then:
+确保前后端都已启动，再执行：
 
 ```powershell
 cd testing/e2e
@@ -259,3 +207,12 @@ npm install
 npx playwright install chromium
 node playwright.mjs
 ```
+
+## 相关文档
+
+- [backend/README.md](backend/README.md)
+- [frontend/README.md](frontend/README.md)
+- [测试手册](docs/测试手册.md)
+- [技术选型文档](docs/技术选型文档.md)
+- [架构设计](docs/架构设计.md)
+- [学习手册](docs/学习手册.md)
