@@ -2,7 +2,7 @@
 
 [中文说明](README-cn.md) | English
 
-WorkPal is a Go + React office collaboration project that now runs as a real microservice system. The frontend talks only to the API gateway, while backend domain services own their own runtime and storage boundaries.
+WorkPal is a Go + React office collaboration platform running as a real microservice system. The frontend communicates exclusively through the API gateway, while each backend domain service owns its own runtime and storage boundary.
 
 ## What is in the project
 
@@ -10,16 +10,18 @@ WorkPal is a Go + React office collaboration project that now runs as a real mic
 - bilingual UI: `English / 简体中文`
 - light and dark theme, message sound toggle, density toggle
 - overview, chat, tasks, schedule, files, and directory modules
-- direct chat, group chat, group announcement, and group files
+- direct chat, group chat, group announcements, group files
+- message editing, message recall, and inline editing in the chat pane
 - backend-backed tasks, schedule, files, and directory search
-- gateway governance, Redis-backed service registry, Redis-backed IM cluster fanout, and outbox-backed Redis Streams search indexing
+- gateway governance, Redis-backed service registry, Redis-backed IM cluster fanout, outbox-backed Redis Streams search indexing
+- versioned database migrations for all four domain services
 
 ## Stack
 
-- Backend: Go, Gin, GORM, PostgreSQL, Redis, Redis Streams, Bleve
-- Frontend: React 18, Vite, TypeScript, Zustand
-- File storage: MinIO with local-file fallback
-- Realtime: WebSocket through the IM service, with Redis Pub/Sub fanout for multi-instance delivery
+- **Backend:** Go 1.22, Gin, GORM, PostgreSQL 16, Redis 7, Redis Streams, Bleve, golang-migrate
+- **Frontend:** React 18, Vite 5, TypeScript 5.4, Zustand 4.5
+- **File storage:** MinIO with local-file fallback
+- **Realtime:** WebSocket through the IM service, with Redis Pub/Sub fanout for multi-instance delivery
 
 ## Ports
 
@@ -43,14 +45,14 @@ WorkPal is a Go + React office collaboration project that now runs as a real mic
 | --- | --- | --- |
 | Gateway | stateless | ingress, route catalog, service catalog, service discovery fallback, rate limit, retry, circuit breaker, health |
 | User Service | `workpal_user` | login, users, departments, employees, development seed data |
-| IM Service | `workpal_im` | direct chat, group chat, announcements, messages, WebSocket, Redis fanout, message outbox |
+| IM Service | `workpal_im` | direct chat, group chat, announcements, messages, message edit/recall, WebSocket, Redis fanout, message outbox |
 | File Service | `workpal_file` | file metadata, upload, share, delete |
 | Search Service | Bleve + Redis Streams | message indexing and search |
 | Workspace Service | `workpal_workspace` | tasks and schedule |
 
 ## Gateway learning surface
 
-Gateway now exposes:
+Gateway exposes:
 
 - `GET /health/live`
 - `GET /health/ready`
@@ -58,7 +60,7 @@ Gateway now exposes:
 - `GET /gateway/routes`
 - `GET /gateway/services`
 
-Gateway now implements:
+Gateway implements:
 
 - request ID propagation
 - explicit route catalog
@@ -68,7 +70,31 @@ Gateway now implements:
 - per-service circuit breakers
 - in-memory rate limiting
 
-`/gateway/services` now shows discovered instances when Redis registry data is available, and falls back to the configured static upstream when registry data is missing.
+## Database migrations
+
+Each service has versioned SQL migrations under `backend/migrations/<service>/`:
+
+| Service | Migration | Tables |
+| --- | --- | --- |
+| user-service | `001_init` | `users`, `departments`, `employees` |
+| im-service | `001_init` | `conversations`, `conversation_members`, `messages`, `message_outbox`, `message_reads` |
+| file-service | `001_init` | `files` |
+| workspace-service | `001_init` | `tasks`, `schedule_events` |
+
+Run migrations manually:
+
+```powershell
+cd backend
+make migrate-install
+make migrate-up SERVICE=user-service
+make migrate-down SERVICE=user-service
+```
+
+Or create new migrations:
+
+```powershell
+make migrate-create SERVICE=im-service NAME=add_message_attachments
+```
 
 ## Microservice learning mapping
 
@@ -104,8 +130,6 @@ Expected result:
 
 - `postgres`, `redis`, and `minio` are `Up` or `healthy`
 - `gateway`, `user-service`, `im-service`, `file-service`, `search-service`, and `workspace-service` are `Up`
-
-Compose waits for Redis before starting registry-enabled backend services, so `/gateway/services` can show discovered instances instead of immediately falling back to static URLs.
 
 Each backend service automatically ensures the databases it owns exist:
 
@@ -192,7 +216,8 @@ You should see:
 
 ## Notes about current frontend data
 
-- tasks, schedule, files, and directory are backend-backed
+- tasks, schedule, files, chat, and directory are backend-backed
+- message editing, recall, and mark-read are supported via the IM API
 - the files module no longer mixes frontend-only seeded documents into the main document list
 - seeded accounts remain intentionally exposed on the login screen for acceptance and debugging
 
@@ -202,7 +227,8 @@ You should see:
 
 ```powershell
 cd backend
-go test ./...
+go vet ./...
+go test -race ./...
 ```
 
 ### Frontend
@@ -216,14 +242,20 @@ npm run build
 
 ### Continuous integration
 
-GitHub Actions runs on pushes and pull requests to `main`. The current workflow validates backend build, `go vet`, golangci-lint, race-enabled Go tests, frontend lint, frontend unit and component tests, frontend production build, and Docker Compose configuration.
+GitHub Actions runs on pushes and pull requests to `main`. The pipeline includes:
+
+- **Backend:** build, `go vet`, `golangci-lint`, race-enabled Go tests
+- **Frontend:** TypeScript type check, ESLint, Vitest component tests, production build
+- **E2E:** starts Compose services, runs Playwright API smoke tests (health, login, chat)
+- **Compose:** Docker Compose configuration validation
 
 ### End-to-end smoke test
 
-Make sure backend and frontend are already running, then execute:
+Make sure backend and frontend are already running, then:
 
 ```powershell
-cd frontend
+cd testing/e2e
+npm install
 npx playwright install chromium
-node ..\testing\e2e\playwright.mjs
+node playwright.mjs
 ```
