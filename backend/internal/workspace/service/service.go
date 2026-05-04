@@ -9,13 +9,25 @@ import (
 	"time"
 
 	"github.com/Tangyd893/WorkPal/backend/internal/workspace/model"
-	"github.com/Tangyd893/WorkPal/backend/internal/workspace/repo"
 )
 
 var ErrNotFound = errors.New("workspace item not found")
 
+type Repository interface {
+	ListTasks(ctx context.Context, userID int64) ([]*model.Task, error)
+	CreateTask(ctx context.Context, task *model.Task) error
+	GetTask(ctx context.Context, userID, taskID int64) (*model.Task, error)
+	SaveTask(ctx context.Context, task *model.Task) error
+	DeleteTask(ctx context.Context, userID, taskID int64) error
+	ListEvents(ctx context.Context, userID int64) ([]*model.ScheduleEvent, error)
+	CreateEvent(ctx context.Context, event *model.ScheduleEvent) error
+	GetEvent(ctx context.Context, userID, eventID int64) (*model.ScheduleEvent, error)
+	SaveEvent(ctx context.Context, event *model.ScheduleEvent) error
+	DeleteEvent(ctx context.Context, userID, eventID int64) error
+}
+
 type Service struct {
-	repo *repo.Repo
+	repo Repository
 }
 
 type TaskDTO struct {
@@ -65,7 +77,7 @@ type EventInput struct {
 	Room            string   `json:"room"`
 }
 
-func NewService(repo *repo.Repo) *Service {
+func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
