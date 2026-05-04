@@ -465,6 +465,8 @@ export const translations: Record<Locale, AppTranslations> = {
       editMessage: 'Edit',
       recallMessage: 'Recall',
     },
+  },
+  'zh-CN': {
     common: {
       workpal: 'WorkPal',
       cancel: '取消',
@@ -703,6 +705,8 @@ export const translations: Record<Locale, AppTranslations> = {
       editMessage: '编辑',
       recallMessage: '撤回',
     },
+  },
+};
 
 export function useI18n() {
   const locale = usePreferencesStore((state) => state.locale)
