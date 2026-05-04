@@ -216,6 +216,8 @@ export interface AppTranslations {
     uploadSuccess: string
     uploadFailure: string
     saveFailure: string
+    editMessage: string
+    recallMessage: string
   }
   status: {
     online: string
@@ -460,13 +462,9 @@ export const translations: Record<Locale, AppTranslations> = {
       uploadSuccess: 'Group file uploaded.',
       uploadFailure: 'Unable to upload the group file.',
       saveFailure: 'Unable to update the group announcement.',
+      editMessage: 'Edit',
+      recallMessage: 'Recall',
     },
-    status: {
-      online: 'Online',
-      away: 'Focus',
-    },
-  },
-  'zh-CN': {
     common: {
       workpal: 'WorkPal',
       cancel: '取消',
@@ -702,13 +700,9 @@ export const translations: Record<Locale, AppTranslations> = {
       uploadSuccess: '群文件上传成功。',
       uploadFailure: '群文件上传失败。',
       saveFailure: '保存群公告失败。',
+      editMessage: '编辑',
+      recallMessage: '撤回',
     },
-    status: {
-      online: '在线',
-      away: '专注中',
-    },
-  },
-}
 
 export function useI18n() {
   const locale = usePreferencesStore((state) => state.locale)

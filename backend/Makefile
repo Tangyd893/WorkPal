@@ -1,4 +1,4 @@
-.PHONY: deps run-gateway run-user run-im run-file run-search run-workspace test build-services docker-up docker-down lint clean help
+.PHONY: deps run-gateway run-user run-im run-file run-search run-workspace test build-services docker-up docker-down lint clean help migrate-install migrate-up migrate-down migrate-create
 
 # Go parameters
 GOCMD=go
@@ -71,5 +71,32 @@ help:
 	@echo "  make run-file    - Run file service"
 	@echo "  make run-search  - Run search service"
 	@echo "  make run-workspace - Run workspace service"
-	@echo "  make test        - Run tests"
-	@echo "  make lint        - Run golangci-lint"
+  @echo "  make test            - Run tests"
+  @echo "  make lint            - Run golangci-lint"
+  @echo "  make migrate-install - Install golang-migrate CLI"
+  @echo "  make migrate-up SERVICE=<name>       - Run migrations up for one service"
+  @echo "  make migrate-down SERVICE=<name>     - Rollback last migration"
+  @echo "  make migrate-create SERVICE=<name> NAME=<name> - Create a new migration pair"
+
+# Migration parameters
+PG_USER ?= workpal
+PG_PASSWORD ?= workpal123
+PG_HOST ?= localhost
+PG_PORT ?= 5432
+PG_DB ?= workpal
+PG_URL := postgres://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_DB)?sslmode=disable
+
+migrate-install:
+	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+migrate-up:
+	@if [ -z "$(SERVICE)" ]; then echo "Usage: make migrate-up SERVICE=user-service"; exit 1; fi
+	migrate -path migrations/$(SERVICE) -database "$(PG_URL)" up
+
+migrate-down:
+	@if [ -z "$(SERVICE)" ]; then echo "Usage: make migrate-down SERVICE=user-service"; exit 1; fi
+	migrate -path migrations/$(SERVICE) -database "$(PG_URL)" down 1
+
+migrate-create:
+	@if [ -z "$(SERVICE)" ] || [ -z "$(NAME)" ]; then echo "Usage: make migrate-create SERVICE=user-service NAME=add_avatar"; exit 1; fi
+	migrate create -ext sql -dir migrations/$(SERVICE) -seq $(NAME)

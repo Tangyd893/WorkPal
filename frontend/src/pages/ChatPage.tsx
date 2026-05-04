@@ -48,6 +48,7 @@ export default function ChatPage({ teamMembers, text }: ChatPageProps) {
           conversation={chat.currentConversation}
           userId={chat.userId}
           labels={text.chat}
+          commonLabels={text.common}
           messages={chat.displayedMessages}
           input={chat.input}
           searchQuery={chat.searchQuery}
@@ -58,6 +59,8 @@ export default function ChatPage({ teamMembers, text }: ChatPageProps) {
           onSearch={chat.handleSearch}
           onClearSearch={chat.handleClearSearch}
           onSend={chat.handleSend}
+          onCommitEdit={chat.handleCommitEdit}
+          onRecallMessage={chat.handleRecallMessage}
           messagesEndRef={chat.messagesEndRef}
         />
 

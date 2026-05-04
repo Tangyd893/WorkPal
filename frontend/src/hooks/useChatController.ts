@@ -386,6 +386,48 @@ export function useChatController() {
     }
   }, [])
 
+  const handleCommitEdit = useCallback(
+    async (messageID: number, content: string) => {
+      if (!activeConvID) {
+        return
+      }
+
+      try {
+        const updated = await workpalApi.editMessage(messageID, content)
+        const current = messages[activeConvID] ?? []
+        setMessages(
+          activeConvID,
+          current.map((msg) => (msg.id === messageID ? { ...msg, content: updated.content, updated_at: (updated as Record<string, string>).updated_at } : msg)),
+        )
+        setError('')
+      } catch (editError) {
+        setError(getErrorMessage(editError))
+      }
+    },
+    [activeConvID, messages, setMessages],
+  )
+
+  const handleRecallMessage = useCallback(
+    async (messageID: number) => {
+      if (!activeConvID) {
+        return
+      }
+
+      try {
+        await workpalApi.recallMessage(messageID)
+        const current = messages[activeConvID] ?? []
+        setMessages(
+          activeConvID,
+          current.filter((msg) => msg.id !== messageID),
+        )
+        setError('')
+      } catch (recallError) {
+        setError(getErrorMessage(recallError))
+      }
+    },
+    [activeConvID, messages, setMessages],
+  )
+
   return {
     activeConvID,
     announcementDraft,
@@ -409,8 +451,10 @@ export function useChatController() {
     username,
     closeCreateDialog: () => setCreateDialogOpen(false),
     handleClearSearch,
+    handleCommitEdit,
     handleCreateConversation,
     handleDeleteGroupFile,
+    handleRecallMessage,
     handleSaveAnnouncement,
     handleSearch,
     handleSelectConversation,

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { KeyboardEvent, RefObject } from 'react'
 import type { AppTranslations } from '../../i18n'
 import type { ChatMessage, Conversation } from '../../types/chat'
@@ -6,6 +7,7 @@ interface ConversationPaneProps {
   conversation: Conversation | null
   userId: number | null
   labels: AppTranslations['chat']
+  commonLabels: AppTranslations['common']
   messages: ChatMessage[]
   input: string
   searchQuery: string
@@ -16,6 +18,8 @@ interface ConversationPaneProps {
   onSearch: () => Promise<void>
   onClearSearch: () => void
   onSend: () => Promise<void>
+  onCommitEdit: (messageID: number, content: string) => Promise<void>
+  onRecallMessage: (messageID: number) => Promise<void>
   messagesEndRef: RefObject<HTMLDivElement>
 }
 
@@ -43,6 +47,7 @@ export default function ConversationPane({
   conversation,
   userId,
   labels,
+  commonLabels,
   messages,
   input,
   searchQuery,
@@ -53,8 +58,13 @@ export default function ConversationPane({
   onSearch,
   onClearSearch,
   onSend,
+  onCommitEdit,
+  onRecallMessage,
   messagesEndRef,
 }: ConversationPaneProps) {
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+
   const handleInputKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
       return
@@ -62,6 +72,32 @@ export default function ConversationPane({
 
     event.preventDefault()
     await onSend()
+  }
+
+  const handleStartEdit = (messageID: number, content: string) => {
+    setEditingId(messageID)
+    setEditDraft(content)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    setEditDraft('')
+  }
+
+  const handleCommitEdit = async () => {
+    if (editingId === null) {
+      return
+    }
+
+    const trimmed = editDraft.trim()
+    if (!trimmed) {
+      handleCancelEdit()
+      return
+    }
+
+    await onCommitEdit(editingId, trimmed)
+    setEditingId(null)
+    setEditDraft('')
   }
 
   if (!conversation) {
@@ -110,13 +146,64 @@ export default function ConversationPane({
 
         {messages.map((message) => {
           const ownMessage = message.sender_id === userId
+          const isEditing = editingId === message.id
 
           return (
             <div key={message.id} className={ownMessage ? 'message-row self' : 'message-row'}>
               <div className={ownMessage ? 'message-bubble self' : 'message-bubble'}>
-                <div className="message-content">{message.content}</div>
-                <div className="message-time">{formatTimestamp(message.created_at)}</div>
+                {isEditing ? (
+                  <div className="edit-inline">
+                    <input
+                      type="text"
+                      value={editDraft}
+                      onChange={(event) => setEditDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void handleCommitEdit()
+                        } else if (event.key === 'Escape') {
+                          handleCancelEdit()
+                        }
+                      }}
+                      className="edit-input"
+                      aria-label="Edit message"
+                    />
+                    <div className="edit-actions">
+                      <button type="button" className="secondary-button" onClick={() => void handleCommitEdit()}>
+                        {commonLabels.save}
+                      </button>
+                      <button type="button" className="secondary-button" onClick={handleCancelEdit}>
+                        {commonLabels.cancel}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="message-content">{message.content}</div>
+                    <div className="message-time">{formatTimestamp(message.created_at)}</div>
+                  </>
+                )}
               </div>
+              {ownMessage && !isEditing ? (
+                <div className="message-actions">
+                  <button
+                    type="button"
+                    className="action-link"
+                    onClick={() => handleStartEdit(message.id, message.content)}
+                    aria-label={labels.editMessage}
+                  >
+                    {labels.editMessage}
+                  </button>
+                  <button
+                    type="button"
+                    className="action-link"
+                    onClick={() => void onRecallMessage(message.id)}
+                    aria-label={labels.recallMessage}
+                  >
+                    {labels.recallMessage}
+                  </button>
+                </div>
+              ) : null}
             </div>
           )
         })}

@@ -108,3 +108,40 @@ jobs:
 
       - name: Validate Docker Compose config
         run: docker compose -f docker/docker-compose.yaml config --quiet
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start backend services
+        run: |
+          docker compose -f docker/docker-compose.yaml up -d --wait --wait-timeout 60
+          echo "Backend services started."
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install E2E dependencies
+        working-directory: ./testing/e2e
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: ./testing/e2e
+        run: npx playwright install chromium --with-deps
+
+      - name: Run API smoke tests
+        working-directory: ./testing/e2e
+        run: node playwright.mjs
+        continue-on-error: true
+
+      - name: Collect docker logs on failure
+        if: failure()
+        run: docker compose -f docker/docker-compose.yaml logs --tail 200
+
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker/docker-compose.yaml down -v

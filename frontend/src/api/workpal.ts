@@ -33,6 +33,14 @@ interface UpdateConversationPayload {
   announcement?: string
 }
 
+interface EditMessagePayload {
+  content: string
+}
+
+interface AddMemberPayload {
+  user_id: number
+}
+
 type CreateConversationPayload =
   | {
       type: 1
@@ -189,5 +197,37 @@ export const workpalApi = {
 
   shareScheduleEvent(eventID: string) {
     return apiPost<ScheduleEvent, undefined>(`/schedule/${eventID}/share`)
+  },
+
+  editMessage(messageID: number, content: string) {
+    return apiPut<ChatMessage, EditMessagePayload>(`/messages/${messageID}`, { content })
+  },
+
+  recallMessage(messageID: number) {
+    return apiDelete<{ id: number; recalled: boolean }>(`/messages/${messageID}`)
+  },
+
+  markRead(messageID: number) {
+    return apiPost<{ message_id: number; read: boolean }, undefined>(`/messages/${messageID}/read`)
+  },
+
+  markAllRead(convID: number) {
+    return apiPost<{ conv_id: number; read: boolean }, undefined>(`/conversations/${convID}/read-all`)
+  },
+
+  getConversation(convID: number) {
+    return apiGet<Conversation>(`/conversations/${convID}`)
+  },
+
+  deleteConversation(convID: number) {
+    return apiDelete<{ id: number; deleted: boolean }>(`/conversations/${convID}`)
+  },
+
+  addConversationMember(convID: number, userId: number) {
+    return apiPost<Conversation, AddMemberPayload>(`/conversations/${convID}/members`, { user_id: userId })
+  },
+
+  removeConversationMember(convID: number, userId: number) {
+    return apiDelete<Conversation>(`/conversations/${convID}/members/${userId}`)
   },
 }
