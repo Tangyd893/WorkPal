@@ -216,3 +216,11 @@ node playwright.mjs
 - [技术选型文档](docs/技术选型文档.md)
 - [架构设计](docs/架构设计.md)
 - [学习手册](docs/学习手册.md)
+
+## 生产部署注意事项
+
+- 生产环境必须通过环境变量或 Kubernetes Secret 覆盖 `SERVER_JWTSECRET`、`SERVER_INTERNALTOKEN`、`DATABASE_PASSWORD`、`FILE_MINIO_ACCESSKEY`、`FILE_MINIO_SECRETKEY` 等敏感配置。
+- 不要提交本地 `.env`、`backend/configs/config.yaml`、数据库密码、MinIO 密钥或真实令牌；仓库 `.gitignore` 已覆盖这些本地文件。
+- `backend/configs/生产配置模板.yaml` 仅作为模板，不应直接携带真实密钥。
+- 首次上线前请替换所有默认开发账号密码，并检查 Grafana、MinIO、数据库等控制台默认口令。
+- 敏感操作会写入 `audit_logs` 表，建议生产环境定期归档并限制查询权限。

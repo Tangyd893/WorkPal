@@ -169,7 +169,6 @@ func (a *gatewayApp) Register(r *gin.Engine) {
 	}
 
 	r.Use(requestIDMiddleware())
-	r.Use(gatewayAccessLog())
 	r.Use(rateLimitMiddleware(a.limiter))
 
 	r.GET("/health/live", func(c *gin.Context) {
@@ -281,6 +280,12 @@ func buildUpstreamServices(cfg *config.Config, registryClient *redis.Client) ([]
 		if timeout <= 0 {
 			timeout = durationFromMS(timeoutCfg.DefaultMS)
 		}
+		failureThreshold := maxInt(1, breakerCfg.FailureThreshold)
+		coolDown := durationFromMS(breakerCfg.CoolDownMS)
+		if spec.name == "search-service" {
+			failureThreshold = 5
+			coolDown = 30 * time.Second
+		}
 		service := &upstreamService{
 			name:              spec.name,
 			cfg:               cfg,
@@ -292,8 +297,8 @@ func buildUpstreamServices(cfg *config.Config, registryClient *redis.Client) ([]
 			retryBackoff:      durationFromMS(retryCfg.BackoffMS),
 			supportsWebSocket: spec.supportsWebSocket,
 			breaker: newCircuitBreaker(
-				maxInt(1, breakerCfg.FailureThreshold),
-				durationFromMS(breakerCfg.CoolDownMS),
+				failureThreshold,
+				coolDown,
 			),
 		}
 		proxy, err := newReverseProxy(service)
@@ -449,6 +454,10 @@ func newReverseProxy(service *upstreamService) (*httputil.ReverseProxy, error) {
 		*req = *req.WithContext(ctx)
 		if requestID := requestIDFromContext(req.Context()); requestID != "" {
 			req.Header.Set("X-Request-ID", requestID)
+			req.Header.Set(platform.TraceIDHeader, requestID)
+		}
+		if traceParent := req.Header.Get(platform.TraceParentHeader); traceParent != "" {
+			req.Header.Set(platform.TraceParentHeader, traceParent)
 		}
 		req.Header.Set("X-Forwarded-Proto", forwardedProto(req))
 		req.Header.Set("X-Forwarded-Host", incomingHost)
@@ -646,11 +655,18 @@ type upstreamRequestKey struct{}
 
 func requestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		requestID := c.GetHeader("X-Request-ID")
+		requestID := platform.TraceIDFromContext(c.Request.Context())
+		if requestID == "" {
+			requestID = c.GetHeader(platform.TraceIDHeader)
+		}
+		if requestID == "" {
+			requestID = c.GetHeader("X-Request-ID")
+		}
 		if requestID == "" {
 			requestID = uuid.NewString()
 		}
 		c.Header("X-Request-ID", requestID)
+		c.Header(platform.TraceIDHeader, requestID)
 		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), requestIDKey{}, requestID))
 		c.Next()
 	}
@@ -658,33 +674,15 @@ func requestIDMiddleware() gin.HandlerFunc {
 
 func requestIDFromContext(ctx context.Context) string {
 	requestID, _ := ctx.Value(requestIDKey{}).(string)
+	if requestID == "" {
+		requestID = platform.TraceIDFromContext(ctx)
+	}
 	return requestID
 }
 
 func upstreamRequestFromContext(ctx context.Context) upstreamRequestInfo {
 	info, _ := ctx.Value(upstreamRequestKey{}).(upstreamRequestInfo)
 	return info
-}
-
-func gatewayAccessLog() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		c.Next()
-		upstreamInfo := upstreamRequestFromContext(c.Request.Context())
-		log.Printf(
-			"[gateway] request_id=%s method=%s path=%s status=%d latency=%s client=%s upstream=%s route=%s instance=%s discovery=%s",
-			requestIDFromContext(c.Request.Context()),
-			c.Request.Method,
-			c.Request.URL.Path,
-			c.Writer.Status(),
-			time.Since(start),
-			clientIP(c.Request),
-			c.Writer.Header().Get("X-Upstream-Service"),
-			c.Writer.Header().Get("X-Gateway-Route"),
-			upstreamInfo.instanceID,
-			upstreamInfo.discoveryMode,
-		)
-	}
 }
 
 func writeGatewayError(w http.ResponseWriter, status int, message string, requestID string) {

@@ -295,10 +295,10 @@ export function useChatController() {
       setSearchResults(result.messages)
       setSearchActive(true)
       setError('')
-    } catch (searchError) {
+    } catch {
       setSearchResults([])
       setSearchActive(true)
-      setError(getErrorMessage(searchError))
+      setError('搜索暂不可用，消息收发不受影响。')
     } finally {
       setSearching(false)
     }

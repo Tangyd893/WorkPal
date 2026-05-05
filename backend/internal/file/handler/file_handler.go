@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/Tangyd893/WorkPal/backend/internal/file/model"
@@ -17,14 +18,19 @@ import (
 type FileHandler struct {
 	fileSvc *service.FileService
 	convSvc conversationAuthorizer
+	audit   *audit.Recorder
 }
 
 type conversationAuthorizer interface {
 	IsMember(ctx context.Context, convID, userID int64) (bool, error)
 }
 
-func NewFileHandler(fileSvc *service.FileService, convSvc conversationAuthorizer) *FileHandler {
-	return &FileHandler{fileSvc: fileSvc, convSvc: convSvc}
+func NewFileHandler(fileSvc *service.FileService, convSvc conversationAuthorizer, recorders ...*audit.Recorder) *FileHandler {
+	var recorder *audit.Recorder
+	if len(recorders) > 0 {
+		recorder = recorders[0]
+	}
+	return &FileHandler{fileSvc: fileSvc, convSvc: convSvc, audit: recorder}
 }
 
 func (h *FileHandler) Upload(c *gin.Context) {
@@ -74,6 +80,7 @@ func (h *FileHandler) Download(c *gin.Context) {
 		return
 	}
 	defer reader.Close()
+	h.audit.Record(c.Request.Context(), userID, "下载文件", "file", strconv.FormatInt(fileID, 10), c.ClientIP())
 
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file.Name))
 	c.Header("Content-Type", file.ContentType)
@@ -104,6 +111,7 @@ func (h *FileHandler) Delete(c *gin.Context) {
 		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.audit.Record(c.Request.Context(), userID, "删除文件", "file", strconv.FormatInt(fileID, 10), c.ClientIP())
 	response.Success(c, h.serializeFile(c, deletedFile))
 }
 

@@ -40,3 +40,21 @@ type ScheduleEvent struct {
 	UpdatedAt       time.Time      `json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
 }
+
+type TaskSaga struct {
+	ID           int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	TaskID       int64      `gorm:"not null;index" json:"task_id"`
+	UserID       int64      `gorm:"not null;index" json:"user_id"`
+	SagaType     string     `gorm:"size:64;not null;index" json:"saga_type"`
+	Status       string     `gorm:"size:32;not null;index" json:"status"`
+	CurrentStep  string     `gorm:"size:128;not null" json:"current_step"`
+	Compensation string     `gorm:"type:text" json:"compensation"`
+	LastError    string     `gorm:"type:text" json:"last_error"`
+	NextRunAt    *time.Time `gorm:"index" json:"next_run_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+func (TaskSaga) TableName() string {
+	return "task_sagas"
+}

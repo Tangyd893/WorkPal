@@ -26,6 +26,10 @@ type Repository interface {
 	DeleteEvent(ctx context.Context, userID, eventID int64) error
 }
 
+type TaskSagaRepository interface {
+	CreateTaskSaga(ctx context.Context, saga *model.TaskSaga) error
+}
+
 type Service struct {
 	repo Repository
 }
@@ -109,6 +113,9 @@ func (s *Service) CreateTask(ctx context.Context, userID int64, input TaskInput)
 	}
 	if err := s.repo.CreateTask(ctx, task); err != nil {
 		return TaskDTO{}, err
+	}
+	if strings.TrimSpace(task.DueDate) != "" {
+		s.recordTaskReminderSaga(ctx, task)
 	}
 	return taskDTO(task), nil
 }
@@ -257,4 +264,19 @@ func fallback(value, defaultValue string) string {
 		return defaultValue
 	}
 	return value
+}
+
+func (s *Service) recordTaskReminderSaga(ctx context.Context, task *model.Task) {
+	repo, ok := s.repo.(TaskSagaRepository)
+	if !ok {
+		return
+	}
+	_ = repo.CreateTaskSaga(ctx, &model.TaskSaga{
+		TaskID:       task.ID,
+		UserID:       task.UserID,
+		SagaType:     "创建带提醒任务",
+		Status:       "completed",
+		CurrentStep:  "任务已创建，提醒等待通知服务接入",
+		Compensation: "如果提醒写入失败，补偿步骤为删除提醒记录并保留任务本体",
+	})
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
@@ -21,6 +23,7 @@ type MessageHandler struct {
 	hub       *imWS.Hub
 	searchSvc *searchSvc.SearchService
 	cluster   clusterUserBroadcaster
+	audit     *audit.Recorder
 }
 
 type clusterUserBroadcaster interface {
@@ -28,10 +31,11 @@ type clusterUserBroadcaster interface {
 }
 
 type SendReq struct {
-	Type     int8                   `json:"type"`
-	Content  string                 `json:"content"`
-	Metadata map[string]interface{} `json:"metadata"`
-	ReplyTo  int64                  `json:"reply_to"`
+	Type           int8                   `json:"type"`
+	Content        string                 `json:"content"`
+	Metadata       map[string]interface{} `json:"metadata"`
+	ReplyTo        int64                  `json:"reply_to"`
+	IdempotencyKey string                 `json:"idempotency_key"`
 }
 
 func NewMessageHandler(
@@ -40,13 +44,19 @@ func NewMessageHandler(
 	hub *imWS.Hub,
 	searchSvc *searchSvc.SearchService,
 	cluster clusterUserBroadcaster,
+	recorders ...*audit.Recorder,
 ) *MessageHandler {
+	var recorder *audit.Recorder
+	if len(recorders) > 0 {
+		recorder = recorders[0]
+	}
 	return &MessageHandler{
 		msgSvc:    msgSvc,
 		convSvc:   convSvc,
 		hub:       hub,
 		searchSvc: searchSvc,
 		cluster:   cluster,
+		audit:     recorder,
 	}
 }
 
@@ -77,7 +87,19 @@ func (h *MessageHandler) GetHistory(c *gin.Context) {
 		limit = 100
 	}
 
-	msgs, err := h.msgSvc.GetHistory(c.Request.Context(), convID, beforeID, limit)
+	startAt, startOK := parseOptionalTime(c.Query("start_at"))
+	endAt, endOK := parseOptionalTime(c.Query("end_at"))
+	if (c.Query("start_at") != "" && !startOK) || (c.Query("end_at") != "" && !endOK) {
+		response.FailWithMessage(c, http.StatusBadRequest, "时间范围格式应为 RFC3339")
+		return
+	}
+
+	var msgs []*model.Message
+	if startOK || endOK {
+		msgs, err = h.msgSvc.GetHistoryByTimeRange(c.Request.Context(), convID, startAt, endAt, limit)
+	} else {
+		msgs, err = h.msgSvc.GetHistory(c.Request.Context(), convID, beforeID, limit)
+	}
 	if err != nil {
 		handleServiceErr(c, err)
 		return
@@ -114,7 +136,11 @@ func (h *MessageHandler) Send(c *gin.Context) {
 		msgType = model.MessageTypeText
 	}
 
-	msg, err := h.msgSvc.Send(c.Request.Context(), convID, userID, msgType, req.Content, req.Metadata, req.ReplyTo)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.GetHeader("Idempotency-Key")
+	}
+	msg, err := h.msgSvc.SendWithIdempotency(c.Request.Context(), convID, userID, msgType, req.Content, req.Metadata, req.ReplyTo, idempotencyKey)
 	if err != nil {
 		handleServiceErr(c, err)
 		return
@@ -133,6 +159,14 @@ func (h *MessageHandler) Send(c *gin.Context) {
 	}
 
 	response.Success(c, msg)
+}
+
+func parseOptionalTime(value string) (time.Time, bool) {
+	if value == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	return parsed, err == nil
 }
 
 func (h *MessageHandler) Edit(c *gin.Context) {
@@ -177,6 +211,7 @@ func (h *MessageHandler) Delete(c *gin.Context) {
 	if h.searchSvc != nil {
 		_ = h.searchSvc.DeleteMessage(msgID)
 	}
+	h.audit.Record(c.Request.Context(), userID, "删除消息", "message", strconv.FormatInt(msgID, 10), c.ClientIP())
 	response.Success(c, nil)
 }
 

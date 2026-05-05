@@ -26,6 +26,7 @@ interface LoginPayload {
 interface SendMessagePayload {
   type: number
   content: string
+  idempotency_key: string
 }
 
 interface UpdateConversationPayload {
@@ -95,7 +96,11 @@ export const workpalApi = {
   },
 
   sendMessage(convID: number, content: string) {
-    const payload: SendMessagePayload = { type: 1, content }
+    const idempotencyKey =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+    const payload: SendMessagePayload = { type: 1, content, idempotency_key: idempotencyKey }
     return apiPost<ChatMessage, SendMessagePayload>(`/conversations/${convID}/messages`, payload)
   },
 

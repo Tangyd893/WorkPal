@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	"github.com/Tangyd893/WorkPal/backend/internal/platform"
 	workspaceHandler "github.com/Tangyd893/WorkPal/backend/internal/workspace/handler"
 	workspaceModel "github.com/Tangyd893/WorkPal/backend/internal/workspace/model"
@@ -23,13 +24,13 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	if err := db.AutoMigrate(&workspaceModel.Task{}, &workspaceModel.ScheduleEvent{}); err != nil {
+	if err := db.AutoMigrate(&workspaceModel.Task{}, &workspaceModel.ScheduleEvent{}, &workspaceModel.TaskSaga{}, &audit.Log{}); err != nil {
 		log.Fatalf("migrate workspace service schema: %v", err)
 	}
 
 	repo := workspaceRepo.NewRepo(db)
 	svc := workspaceService.NewService(repo)
-	handler := workspaceHandler.NewHandler(svc)
+	handler := workspaceHandler.NewHandler(svc, audit.NewRecorder(db))
 
 	var registry *platform.ServiceRegistry
 	var registryStop context.CancelFunc

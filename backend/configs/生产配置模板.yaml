@@ -1,0 +1,88 @@
+server:
+  port: 8080
+  mode: release
+  jwtSecret: "${SERVER_JWTSECRET}"
+  internalToken: "${SERVER_INTERNALTOKEN}"
+  jwtExpiryHours: 12
+
+services:
+  gatewayPort: 8080
+  userPort: 8081
+  imPort: 8082
+  filePort: 8083
+  searchPort: 8084
+  workspacePort: 8085
+  userURL: "http://user-service:8081"
+  imURL: "http://im-service:8082"
+  fileURL: "http://file-service:8083"
+  searchURL: "http://search-service:8084"
+  workspaceURL: "http://workspace-service:8085"
+
+gateway:
+  healthTimeoutMs: 3000
+  rateLimit:
+    requests: 600
+    windowMs: 60000
+  retry:
+    maxAttempts: 2
+    backoffMs: 75
+  circuitBreaker:
+    failureThreshold: 5
+    coolDownMs: 30000
+  timeouts:
+    defaultMs: 8000
+    userMs: 5000
+    imMs: 15000
+    fileMs: 20000
+    searchMs: 5000
+    workspaceMs: 8000
+
+registry:
+  enabled: true
+  namespace: "workpal:registry"
+  ttlMs: 15000
+  heartbeatMs: 5000
+
+database:
+  host: "${DATABASE_HOST}"
+  port: 5432
+  user: "${DATABASE_USER}"
+  password: "${DATABASE_PASSWORD}"
+  adminDBName: "postgres"
+  maxOpenConns: 50
+  maxIdleConns: 10
+  names:
+    user: "workpal_user"
+    im: "workpal_im"
+    file: "workpal_file"
+    workspace: "workpal_workspace"
+
+redis:
+  host: "${REDIS_HOST}"
+  port: 6379
+  password: "${REDIS_PASSWORD}"
+  db: 0
+  streamsKey: "workpal:streams:messages"
+
+file:
+  storeType: "minio"
+  localBaseDir: "/app/uploads"
+  maxFileSizeMB: 100
+  minio:
+    endpoint: "${FILE_MINIO_ENDPOINT}"
+    accessKey: "${FILE_MINIO_ACCESSKEY}"
+    secretKey: "${FILE_MINIO_SECRETKEY}"
+    bucket: "workpal"
+    useSSL: false
+
+search:
+  engine: "bleve"
+  bleve:
+    indexPath: "/app/data/search"
+
+ws:
+  readBufferSize: 1024
+  writeBufferSize: 1024
+  pingIntervalSec: 30
+  pongWaitSec: 60
+  maxMessageSize: 65536

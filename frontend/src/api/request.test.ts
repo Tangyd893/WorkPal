@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { AxiosHeaders } from 'axios'
 import { useAuthStore, useConvStore, useWSStore } from '../hooks/useAuthStore'
+import request, { createTraceID, TRACE_ID_HEADER, TRACE_PARENT_HEADER } from './request'
 
 beforeEach(() => {
   localStorage.clear()
@@ -130,5 +132,73 @@ describe('useWSStore (Zustand)', () => {
     setMessages(200, msgs)
     const state = useWSStore.getState()
     expect(state.messages[200].length).toBe(2)
+  })
+})
+
+describe('request client observability', () => {
+  it('should create non-empty trace ids', () => {
+    expect(createTraceID()).toMatch(/^[a-f0-9]{32}$/i)
+  })
+
+  it('should add trace headers to outgoing requests', async () => {
+    const response = await request.get<{ traceID: string | null; traceParent: string | null }>('/probe', {
+      adapter: async (config) => {
+        const headers = AxiosHeaders.from(config.headers)
+        const traceID = headers.get(TRACE_ID_HEADER)
+        const traceParent = headers.get(TRACE_PARENT_HEADER)
+        return {
+          data: {
+            traceID: typeof traceID === 'string' ? traceID : null,
+            traceParent: typeof traceParent === 'string' ? traceParent : null,
+          },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+        }
+      },
+    })
+
+    expect(response.data.traceID).toBeTruthy()
+    expect(response.data.traceParent).toContain(response.data.traceID)
+  })
+
+  it('should preserve an explicit trace header', async () => {
+    const response = await request.get<{ traceID: string | null }>('/probe', {
+      headers: { [TRACE_ID_HEADER]: 'trace-from-caller' },
+      adapter: async (config) => {
+        const headers = AxiosHeaders.from(config.headers)
+        const traceID = headers.get(TRACE_ID_HEADER)
+        return {
+          data: { traceID: typeof traceID === 'string' ? traceID : null },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+        }
+      },
+    })
+
+    expect(response.data.traceID).toBe('trace-from-caller')
+  })
+
+  it('should derive traceparent from an explicit W3C trace id', async () => {
+    const traceID = '4bf92f3577b34da6a3ce929d0e0e4736'
+    const response = await request.get<{ traceParent: string | null }>('/probe', {
+      headers: { [TRACE_ID_HEADER]: traceID },
+      adapter: async (config) => {
+        const headers = AxiosHeaders.from(config.headers)
+        const traceParent = headers.get(TRACE_PARENT_HEADER)
+        return {
+          data: { traceParent: typeof traceParent === 'string' ? traceParent : null },
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config,
+        }
+      },
+    })
+
+    expect(response.data.traceParent).toContain(traceID)
   })
 })

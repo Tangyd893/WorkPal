@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/events"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,44 @@ func (r *mockMessageRepo) GetByConvID(ctx context.Context, convID int64, beforeI
 		result = result[:limit]
 	}
 	return result, nil
+}
+
+func (r *mockMessageRepo) GetByConvIDAndTimeRange(ctx context.Context, convID int64, startAt, endAt time.Time, limit int) ([]*model.Message, error) {
+	var result []*model.Message
+	for _, m := range r.msgs {
+		if m.ConvID != convID {
+			continue
+		}
+		if !startAt.IsZero() && m.CreatedAt.Before(startAt) {
+			continue
+		}
+		if !endAt.IsZero() && m.CreatedAt.After(endAt) {
+			continue
+		}
+		result = append(result, m)
+	}
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
+func (r *mockMessageRepo) GetByIdempotencyKey(ctx context.Context, convID, senderID int64, key string, validAfter time.Time) (*model.Message, error) {
+	for _, m := range r.msgs {
+		if m.ConvID == convID && m.SenderID == senderID && m.IdempotencyKey == key && !m.CreatedAt.Before(validAfter) {
+			return m, nil
+		}
+	}
+	return nil, apperrors.ErrMessageNotFound
+}
+
+func (r *mockMessageRepo) ClearExpiredIdempotencyKeys(ctx context.Context, before time.Time) error {
+	for _, m := range r.msgs {
+		if !m.CreatedAt.IsZero() && m.CreatedAt.Before(before) {
+			m.IdempotencyKey = ""
+		}
+	}
+	return nil
 }
 
 func (r *mockMessageRepo) Update(ctx context.Context, msg *model.Message) error {
@@ -150,6 +189,22 @@ func TestMessageServiceSend(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEmpty(t, msg.Metadata)
 	})
+}
+
+func TestMessageServiceSendWithIdempotency(t *testing.T) {
+	repo := newMockMessageRepo()
+	svc := newMessageService(repo)
+	ctx := context.Background()
+
+	first, err := svc.SendWithIdempotency(ctx, 1, 100, model.MessageTypeText, "hello", nil, 0, "idem-001")
+	assert.NoError(t, err)
+
+	second, err := svc.SendWithIdempotency(ctx, 1, 100, model.MessageTypeText, "hello again", nil, 0, "idem-001")
+	assert.NoError(t, err)
+
+	assert.Equal(t, first.ID, second.ID)
+	assert.Equal(t, "hello", second.Content)
+	assert.Len(t, repo.msgs, 1)
 }
 
 func TestMessageServiceEdit(t *testing.T) {

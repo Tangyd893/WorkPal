@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/pagination"
@@ -18,10 +19,15 @@ import (
 
 type ConversationHandler struct {
 	convSvc *service.ConversationService
+	audit   *audit.Recorder
 }
 
-func NewConversationHandler(convSvc *service.ConversationService) *ConversationHandler {
-	return &ConversationHandler{convSvc: convSvc}
+func NewConversationHandler(convSvc *service.ConversationService, recorders ...*audit.Recorder) *ConversationHandler {
+	var recorder *audit.Recorder
+	if len(recorders) > 0 {
+		recorder = recorders[0]
+	}
+	return &ConversationHandler{convSvc: convSvc, audit: recorder}
 }
 
 type CreateConvReq struct {
@@ -186,6 +192,7 @@ func (h *ConversationHandler) Delete(c *gin.Context) {
 		handleServiceErr(c, err)
 		return
 	}
+	h.audit.Record(c.Request.Context(), userID, "删除会话", "conversation", strconv.FormatInt(convID, 10), c.ClientIP())
 	response.Success(c, nil)
 }
 
@@ -237,6 +244,7 @@ func (h *ConversationHandler) RemoveMember(c *gin.Context) {
 		handleServiceErr(c, err)
 		return
 	}
+	h.audit.Record(c.Request.Context(), userID, "移出群成员", "conversation_member", strconv.FormatInt(targetUID, 10), c.ClientIP())
 	response.Success(c, nil)
 }
 

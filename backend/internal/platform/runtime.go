@@ -110,8 +110,12 @@ func NewRouter(cfg *config.Config, serviceName string) *gin.Engine {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	ConfigureLogger(serviceName)
+
 	r := gin.New()
-	r.Use(gin.Logger())
+	r.Use(RequestContext())
+	r.Use(RequestMetrics(serviceName))
+	r.Use(StructuredAccessLog(serviceName))
 	r.Use(gin.Recovery())
 	r.Use(middleware.CORS())
 

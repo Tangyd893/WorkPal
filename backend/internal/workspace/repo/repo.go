@@ -28,6 +28,10 @@ func (r *Repo) CreateTask(ctx context.Context, task *model.Task) error {
 	return r.db.WithContext(ctx).Create(task).Error
 }
 
+func (r *Repo) CreateTaskSaga(ctx context.Context, saga *model.TaskSaga) error {
+	return r.db.WithContext(ctx).Create(saga).Error
+}
+
 func (r *Repo) GetTask(ctx context.Context, userID, taskID int64) (*model.Task, error) {
 	var task model.Task
 	err := r.db.WithContext(ctx).

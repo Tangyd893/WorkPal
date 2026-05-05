@@ -5,6 +5,7 @@ import (
 	"log"
 
 	config "github.com/Tangyd893/WorkPal/backend/configs"
+	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	"github.com/Tangyd893/WorkPal/backend/internal/clients"
 	fileHandler "github.com/Tangyd893/WorkPal/backend/internal/file/handler"
 	fileModel "github.com/Tangyd893/WorkPal/backend/internal/file/model"
@@ -25,7 +26,7 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	if err := db.AutoMigrate(&fileModel.File{}); err != nil {
+	if err := db.AutoMigrate(&fileModel.File{}, &audit.Log{}); err != nil {
 		log.Fatalf("migrate file service schema: %v", err)
 	}
 
@@ -34,7 +35,7 @@ func main() {
 	fileService := fileSvc.NewFileService(fileRepoInst, store, cfg.File.MaxFileSizeMB)
 
 	convSvc := clients.NewIMClient(cfg.Services.IMURL, cfg.Server.InternalToken)
-	fileHdlr := fileHandler.NewFileHandler(fileService, convSvc)
+	fileHdlr := fileHandler.NewFileHandler(fileService, convSvc, audit.NewRecorder(db))
 
 	var registry *platform.ServiceRegistry
 	var registryStop context.CancelFunc

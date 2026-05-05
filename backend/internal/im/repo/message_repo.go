@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"time"
 
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
@@ -61,6 +62,47 @@ func (r *MessageRepo) GetByConvID(ctx context.Context, convID int64, beforeID in
 		Limit(limit).
 		Find(&msgs).Error
 	return msgs, err
+}
+
+func (r *MessageRepo) GetByConvIDAndTimeRange(ctx context.Context, convID int64, startAt, endAt time.Time, limit int) ([]*model.Message, error) {
+	var msgs []*model.Message
+	query := r.db.WithContext(ctx).
+		Where("conv_id = ? AND deleted_at IS NULL", convID)
+
+	if !startAt.IsZero() {
+		query = query.Where("created_at >= ?", startAt)
+	}
+	if !endAt.IsZero() {
+		query = query.Where("created_at <= ?", endAt)
+	}
+
+	err := query.
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&msgs).Error
+	return msgs, err
+}
+
+func (r *MessageRepo) GetByIdempotencyKey(ctx context.Context, convID, senderID int64, key string, validAfter time.Time) (*model.Message, error) {
+	var msg model.Message
+	err := r.db.WithContext(ctx).
+		Where("conv_id = ? AND sender_id = ? AND idempotency_key = ? AND created_at >= ? AND deleted_at IS NULL", convID, senderID, key, validAfter).
+		Order("created_at DESC").
+		First(&msg).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, apperrors.ErrMessageNotFound
+		}
+		return nil, err
+	}
+	return &msg, nil
+}
+
+func (r *MessageRepo) ClearExpiredIdempotencyKeys(ctx context.Context, before time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Message{}).
+		Where("idempotency_key <> '' AND created_at < ?", before).
+		Update("idempotency_key", "").Error
 }
 
 func (r *MessageRepo) CountUnread(ctx context.Context, convID, userID int64) (int64, error) {

@@ -47,17 +47,24 @@ const (
 	MessageTypeCard  = 5
 )
 
+const (
+	MessageTierHot  = "hot"
+	MessageTierCold = "cold"
+)
+
 type Message struct {
-	ID        int64          `gorm:"primaryKey;autoIncrement" json:"id"`
-	ConvID    int64          `gorm:"not null;index" json:"conv_id"`
-	SenderID  int64          `gorm:"not null;index" json:"sender_id"`
-	Type      int8           `gorm:"not null;default:1" json:"type"`
-	Content   string         `gorm:"type:text" json:"content"`
-	Metadata  string         `gorm:"type:jsonb" json:"metadata"`
-	ReplyTo   int64          `gorm:"default:0" json:"reply_to"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	ID             int64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConvID         int64          `gorm:"not null;index" json:"conv_id"`
+	SenderID       int64          `gorm:"not null;index" json:"sender_id"`
+	Type           int8           `gorm:"not null;default:1" json:"type"`
+	Content        string         `gorm:"type:text" json:"content"`
+	Metadata       string         `gorm:"type:jsonb" json:"metadata"`
+	ReplyTo        int64          `gorm:"default:0" json:"reply_to"`
+	IdempotencyKey string         `gorm:"size:128;not null;default:'';index" json:"idempotency_key,omitempty"`
+	Tier           string         `gorm:"size:16;not null;default:'hot';index" json:"tier"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 func (Message) TableName() string {

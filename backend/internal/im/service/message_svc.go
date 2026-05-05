@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	apperrors "github.com/Tangyd893/WorkPal/backend/internal/common/errors"
@@ -14,6 +15,9 @@ type MessageRepository interface {
 	Create(ctx context.Context, msg *model.Message) error
 	GetByID(ctx context.Context, id int64) (*model.Message, error)
 	GetByConvID(ctx context.Context, convID int64, beforeID int64, limit int) ([]*model.Message, error)
+	GetByConvIDAndTimeRange(ctx context.Context, convID int64, startAt, endAt time.Time, limit int) ([]*model.Message, error)
+	GetByIdempotencyKey(ctx context.Context, convID, senderID int64, key string, validAfter time.Time) (*model.Message, error)
+	ClearExpiredIdempotencyKeys(ctx context.Context, before time.Time) error
 	Update(ctx context.Context, msg *model.Message) error
 	SoftDelete(ctx context.Context, msgID int64) error
 	CountUnread(ctx context.Context, convID, userID int64) (int64, error)
@@ -53,13 +57,33 @@ func newMessageService(msgRepo MessageRepository) *MessageService {
 }
 
 func (s *MessageService) Send(ctx context.Context, convID, senderID int64, msgType int8, content string, metadata map[string]interface{}, replyTo int64) (*model.Message, error) {
-	msg, err := buildMessage(convID, senderID, msgType, content, metadata, replyTo)
+	return s.SendWithIdempotency(ctx, convID, senderID, msgType, content, metadata, replyTo, "")
+}
+
+func (s *MessageService) SendWithIdempotency(ctx context.Context, convID, senderID int64, msgType int8, content string, metadata map[string]interface{}, replyTo int64, idempotencyKey string) (*model.Message, error) {
+	idempotencyKey = normalizeIdempotencyKey(idempotencyKey)
+	validAfter := time.Now().Add(-5 * time.Minute)
+	if idempotencyKey != "" {
+		_ = s.msgRepo.ClearExpiredIdempotencyKeys(ctx, validAfter)
+		existing, err := s.msgRepo.GetByIdempotencyKey(ctx, convID, senderID, idempotencyKey, validAfter)
+		if err == nil {
+			return existing, nil
+		}
+		if !apperrors.Is(err, apperrors.ErrMessageNotFound) {
+			return nil, err
+		}
+	}
+
+	msg, err := buildMessage(convID, senderID, msgType, content, metadata, replyTo, idempotencyKey)
 	if err != nil {
 		return nil, err
 	}
 
 	if s.commandStore == nil {
 		if err := s.msgRepo.Create(ctx, msg); err != nil {
+			if idempotencyKey != "" && strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+				return s.msgRepo.GetByIdempotencyKey(ctx, convID, senderID, idempotencyKey, validAfter)
+			}
 			return nil, err
 		}
 		return msg, nil
@@ -71,6 +95,9 @@ func (s *MessageService) Send(ctx context.Context, convID, senderID int64, msgTy
 		}
 		return enqueueUpsertEvent(tx, msg)
 	}); err != nil {
+		if idempotencyKey != "" && strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+			return s.msgRepo.GetByIdempotencyKey(ctx, convID, senderID, idempotencyKey, validAfter)
+		}
 		return nil, err
 	}
 	return msg, nil
@@ -88,6 +115,16 @@ func (s *MessageService) GetHistory(ctx context.Context, convID int64, beforeID 
 		limit = 100
 	}
 	return s.msgRepo.GetByConvID(ctx, convID, beforeID, limit)
+}
+
+func (s *MessageService) GetHistoryByTimeRange(ctx context.Context, convID int64, startAt, endAt time.Time, limit int) ([]*model.Message, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return s.msgRepo.GetByConvIDAndTimeRange(ctx, convID, startAt, endAt, limit)
 }
 
 func (s *MessageService) CountUnread(ctx context.Context, convID, userID int64) (int64, error) {
@@ -167,7 +204,7 @@ func (s *MessageService) Recall(ctx context.Context, msgID, senderID int64) erro
 	})
 }
 
-func buildMessage(convID, senderID int64, msgType int8, content string, metadata map[string]interface{}, replyTo int64) (*model.Message, error) {
+func buildMessage(convID, senderID int64, msgType int8, content string, metadata map[string]interface{}, replyTo int64, idempotencyKey string) (*model.Message, error) {
 	if content == "" && msgType != model.MessageTypeText {
 		return nil, apperrors.ErrContentEmpty
 	}
@@ -179,15 +216,25 @@ func buildMessage(convID, senderID int64, msgType int8, content string, metadata
 	}
 
 	return &model.Message{
-		ConvID:    convID,
-		SenderID:  senderID,
-		Type:      msgType,
-		Content:   content,
-		Metadata:  metaJSON,
-		ReplyTo:   replyTo,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ConvID:         convID,
+		SenderID:       senderID,
+		Type:           msgType,
+		Content:        content,
+		Metadata:       metaJSON,
+		ReplyTo:        replyTo,
+		IdempotencyKey: idempotencyKey,
+		Tier:           model.MessageTierHot,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}, nil
+}
+
+func normalizeIdempotencyKey(key string) string {
+	key = strings.TrimSpace(key)
+	if len(key) > 128 {
+		return key[:128]
+	}
+	return key
 }
 
 func enqueueUpsertEvent(tx MessageTxStore, msg *model.Message) error {

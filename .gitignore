@@ -37,6 +37,9 @@ frontend/vite.config.js
 .env
 *.log
 
+# 项目规划（不提交）
+todo/
+
 # Backend build
 backend/server
 backend/bin/

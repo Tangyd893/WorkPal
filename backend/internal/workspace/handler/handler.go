@@ -3,7 +3,9 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/middleware"
 	"github.com/Tangyd893/WorkPal/backend/internal/common/response"
 	"github.com/Tangyd893/WorkPal/backend/internal/workspace/service"
@@ -11,11 +13,16 @@ import (
 )
 
 type Handler struct {
-	svc *service.Service
+	svc   *service.Service
+	audit *audit.Recorder
 }
 
-func NewHandler(svc *service.Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *service.Service, recorders ...*audit.Recorder) *Handler {
+	var recorder *audit.Recorder
+	if len(recorders) > 0 {
+		recorder = recorders[0]
+	}
+	return &Handler{svc: svc, audit: recorder}
 }
 
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
@@ -97,6 +104,7 @@ func (h *Handler) DeleteTask(c *gin.Context) {
 		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.audit.Record(c.Request.Context(), c.GetInt64("userID"), "删除任务", "task", strconv.FormatInt(id, 10), c.ClientIP())
 	response.Success(c, nil)
 }
 
@@ -145,6 +153,7 @@ func (h *Handler) DeleteEvent(c *gin.Context) {
 		response.FailWithMessage(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.audit.Record(c.Request.Context(), c.GetInt64("userID"), "删除日程", "schedule_event", strconv.FormatInt(id, 10), c.ClientIP())
 	response.Success(c, nil)
 }
 

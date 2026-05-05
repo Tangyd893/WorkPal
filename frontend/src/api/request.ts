@@ -7,6 +7,23 @@ interface ApiResponse<T> {
   data?: T
 }
 
+export const TRACE_ID_HEADER = 'X-Trace-ID'
+export const TRACE_PARENT_HEADER = 'traceparent'
+
+export function createTraceID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+  }
+
+  return `${Date.now().toString(16).padStart(16, '0')}${Math.random().toString(16).slice(2, 18).padEnd(16, '0')}`.slice(0, 32)
+}
+
+function createTraceParent(traceID: string): string {
+  return `00-${traceID}-0000000000000001-01`
+}
+
 function isApiResponse<T>(body: unknown): body is ApiResponse<T> {
   return typeof body === 'object' && body !== null && 'code' in body && typeof (body as { code: unknown }).code === 'number'
 }
@@ -46,13 +63,23 @@ const request = axios.create({
 })
 
 request.interceptors.request.use((config) => {
-  const token = getStoredToken()
-  if (!token) {
-    return config
+  const headers = AxiosHeaders.from(config.headers)
+  if (!headers.get(TRACE_ID_HEADER)) {
+    const traceID = createTraceID()
+    headers.set(TRACE_ID_HEADER, traceID)
+    headers.set(TRACE_PARENT_HEADER, createTraceParent(traceID))
+  } else if (!headers.get(TRACE_PARENT_HEADER)) {
+    const traceID = String(headers.get(TRACE_ID_HEADER))
+    if (/^[a-f0-9]{32}$/i.test(traceID)) {
+      headers.set(TRACE_PARENT_HEADER, createTraceParent(traceID))
+    }
   }
 
-  const headers = AxiosHeaders.from(config.headers)
-  headers.set('Authorization', `Bearer ${token}`)
+  const token = getStoredToken()
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
   config.headers = headers
   return config
 })

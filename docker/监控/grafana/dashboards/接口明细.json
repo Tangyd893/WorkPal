@@ -1,0 +1,61 @@
+{
+  "uid": "workpal-route-detail",
+  "title": "WorkPal 接口明细",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "接口每秒请求数",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (service, route) (rate(workpal_http_requests_total[5m]))",
+          "legendFormat": "{{service}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "接口 P95 延迟",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (service, route, le) (rate(workpal_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{service}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "接口 P99 延迟",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (service, route, le) (rate(workpal_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{service}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "接口错误请求数",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 18 },
+      "targets": [
+        {
+          "expr": "sum by (service, route, status) (rate(workpal_http_requests_total{status=~\"4..|5..\"}[5m]))",
+          "legendFormat": "{{service}} {{route}} {{status}}"
+        }
+      ]
+    }
+  ]
+}

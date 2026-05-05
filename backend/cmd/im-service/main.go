@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/handler"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/model"
 	"github.com/Tangyd893/WorkPal/backend/internal/im/repo"
@@ -44,6 +45,7 @@ func main() {
 		&model.Message{},
 		&model.MessageOutbox{},
 		&model.MessageRead{},
+		&audit.Log{},
 	); err != nil {
 		log.Fatalf("migrate im service schema: %v", err)
 	}
@@ -72,8 +74,9 @@ func main() {
 		log.Printf("[im-service] register service instance: %v", registryErr)
 	}
 
-	convHandler := handler.NewConversationHandler(convSvc)
-	msgHandler := handler.NewMessageHandler(msgSvc, convSvc, hub, nil, clusterBroadcaster)
+	auditRecorder := audit.NewRecorder(db)
+	convHandler := handler.NewConversationHandler(convSvc, auditRecorder)
+	msgHandler := handler.NewMessageHandler(msgSvc, convSvc, hub, nil, clusterBroadcaster, auditRecorder)
 	wsHandler := handler.NewWebSocketHandler(hub, convSvc)
 
 	r := platform.NewRouter(cfg, "im-service")
