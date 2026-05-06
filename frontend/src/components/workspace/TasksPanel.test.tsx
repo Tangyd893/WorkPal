@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { translations } from '../../i18n'
 import { render, click } from '../../test/render'
-import type { CreateTaskInput, WorkspaceTask } from '../../types/workspace'
+import type { WorkspaceTask } from '../../types/workspace'
 import TasksPanel from './TasksPanel'
 
 let view: ReturnType<typeof render> | null = null
@@ -42,6 +42,7 @@ function renderPanel(tasks: WorkspaceTask[] = [], onAddTask = vi.fn()) {
       onAddTask={onAddTask}
       onDeleteTask={vi.fn()}
       onShareTask={vi.fn()}
+      onUpdateTaskStatus={vi.fn()}
     />,
   )
   return { onAddTask }
@@ -69,7 +70,7 @@ describe('TasksPanel', () => {
   it('shows empty message in columns without tasks', () => {
     renderPanel()
     const emptyMessages = view?.container.querySelectorAll('.compact-empty')
-    expect(emptyMessages.length).toBe(4)
+    expect(emptyMessages?.length).toBe(4)
   })
 
   it('opens the create form when add task is clicked', () => {

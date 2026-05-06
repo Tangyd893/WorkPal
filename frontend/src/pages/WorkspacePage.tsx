@@ -1,68 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { workpalApi } from '../api/workpal'
-import DirectoryPanel from '../components/workspace/DirectoryPanel'
-import FilesPanel from '../components/workspace/FilesPanel'
-import OverviewPanel from '../components/workspace/OverviewPanel'
-import SchedulePanel from '../components/workspace/SchedulePanel'
+import ConfirmDialog from '../components/ConfirmDialog'
+import ErrorBoundary from '../components/ErrorBoundary'
+import ModuleSwitcher from '../components/ModuleSwitcher'
+import Sidebar from '../components/Sidebar'
+import ToastViewport from '../components/Toast'
+import Topbar from '../components/Topbar'
 import SettingsDrawer from '../components/workspace/SettingsDrawer'
-import TasksPanel from '../components/workspace/TasksPanel'
+import WorkspaceContent from '../components/workspace/WorkspaceContent'
 import { useAuthStore } from '../hooks/useAuthStore'
 import { usePreferencesStore } from '../hooks/usePreferencesStore'
+import { useToastStore, type ToastType } from '../hooks/useToastStore'
+import { useWorkspaceActions } from '../hooks/useWorkspaceActions'
+import { useWorkspaceData } from '../hooks/useWorkspaceData'
 import { useI18n } from '../i18n'
-import type {
-  ConversationFile,
-  CreateScheduleInput,
-  CreateTaskInput,
-  Department,
-  ScheduleEvent,
-  SharedDocument,
-  TaskStatus,
-  WorkspaceSection,
-  WorkspaceTask,
-  WorkspaceUser,
-} from '../types/workspace'
-import { copyText } from '../utils/clipboard'
-import ChatPage from './ChatPage'
+import type { WorkspaceSection } from '../types/workspace'
+import type { ConfirmRequest } from '../types/workspaceUi'
 
 const sectionOrder: WorkspaceSection[] = ['overview', 'chat', 'tasks', 'schedule', 'files', 'directory']
 
-const nextTaskStatus: Record<TaskStatus, TaskStatus> = {
-  planned: 'in_progress',
-  in_progress: 'review',
-  review: 'done',
-  done: 'done',
-}
-
 function isWorkspaceSection(value: string | undefined): value is WorkspaceSection {
   return sectionOrder.includes(value as WorkspaceSection)
-}
-
-function mapUploadedFileToDocument(
-  file: ConversationFile,
-  ownerUsername: string,
-  shareCount: number,
-  locale: 'en' | 'zh-CN',
-): SharedDocument {
-  return {
-    id: `file-${file.id}`,
-    title: file.name,
-    summary: `${Math.max(1, Math.round(file.size / 1024))} KB`,
-    category: locale === 'zh-CN' ? '上传' : 'Upload',
-    ownerUsername,
-    updatedAt: file.created_at,
-    status: 'ready',
-    sharedCount: shareCount,
-    source: 'custom',
-    fileId: file.id,
-    attachmentName: file.name,
-    attachmentUrl: file.download_path,
-    downloadPath: file.download_path,
-  }
-}
-
-function sortUsers(users: WorkspaceUser[]): WorkspaceUser[] {
-  return [...users].sort((left, right) => (left.nickname || left.username).localeCompare(right.nickname || right.username))
 }
 
 export default function WorkspacePage() {
@@ -78,119 +36,51 @@ export default function WorkspacePage() {
   const setSoundEnabled = usePreferencesStore((state) => state.setSoundEnabled)
   const setCompactMode = usePreferencesStore((state) => state.setCompactMode)
   const resetPreferences = usePreferencesStore((state) => state.reset)
+  const addToast = useToastStore((state) => state.addToast)
 
+  const activeSection = isWorkspaceSection(section) ? section : 'overview'
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState('')
-  const [actionNotice, setActionNotice] = useState('')
-  const [actionError, setActionError] = useState('')
-  const [directoryQuery, setDirectoryQuery] = useState('')
-  const [directoryDepartmentID, setDirectoryDepartmentID] = useState(0)
-  const [directoryLoading, setDirectoryLoading] = useState(false)
-  const [currentUser, setCurrentUser] = useState<WorkspaceUser | null>(null)
-  const [teamMembers, setTeamMembers] = useState<WorkspaceUser[]>([])
-  const [directoryUsers, setDirectoryUsers] = useState<WorkspaceUser[]>([])
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [tasks, setTasks] = useState<WorkspaceTask[]>([])
-  const [schedule, setSchedule] = useState<ScheduleEvent[]>([])
-  const [uploadedFiles, setUploadedFiles] = useState<ConversationFile[]>([])
-  const [uploadShareCounts, setUploadShareCounts] = useState<Record<number, number>>({})
-  const [filesUploading, setFilesUploading] = useState(false)
+  const [moduleSwitcherOpen, setModuleSwitcherOpen] = useState(false)
+  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null)
+  const [confirmBusy, setConfirmBusy] = useState(false)
 
-  const activeSection = isWorkspaceSection(section) ? section : null
-
-  useEffect(() => {
-    let disposed = false
-
-    const loadWorkspaceData = async () => {
-      setLoading(true)
-      setLoadError('')
-
-      try {
-        const [me, users, departmentList, files, taskList, eventList] = await Promise.all([
-          workpalApi.getMe(),
-          workpalApi.listUsers(),
-          workpalApi.listDepartments(),
-          workpalApi.listUserFiles(),
-          workpalApi.listTasks(),
-          workpalApi.listSchedule(),
-        ])
-        if (disposed) {
-          return
-        }
-
-        const sortedUsers = sortUsers(users)
-        setCurrentUser(me)
-        setTeamMembers(sortedUsers)
-        setDirectoryUsers(sortedUsers)
-        setDepartments(departmentList)
-        setUploadedFiles(files)
-        setTasks(taskList)
-        setSchedule(eventList)
-      } catch (error) {
-        if (disposed) {
-          return
-        }
-
-        setLoadError(error instanceof Error ? error.message : 'Unable to load workspace data.')
-      } finally {
-        if (!disposed) {
-          setLoading(false)
-        }
-      }
-    }
-
-    void loadWorkspaceData()
-    return () => {
-      disposed = true
-    }
-  }, [])
+  const workspace = useWorkspaceData(activeSection, username, locale)
+  const notify = useCallback((type: ToastType, message: string) => addToast({ type, message }), [addToast])
+  const actions = useWorkspaceActions({
+    tasks: workspace.tasks,
+    schedule: workspace.schedule,
+    setTasks: workspace.setTasks,
+    setSchedule: workspace.setSchedule,
+    setUploadedFiles: workspace.setUploadedFiles,
+    setUploadShareCounts: workspace.setUploadShareCounts,
+    setFilesUploading: workspace.setFilesUploading,
+    setUploadProgress: workspace.setUploadProgress,
+    notify,
+  })
 
   useEffect(() => {
-    if (!activeSection) {
-      return
-    }
-
     document.title = `${t.common.workpal} - ${t.navigation[activeSection]}`
   }, [activeSection, t])
 
   useEffect(() => {
-    if (loading) {
-      return
-    }
-
-    let disposed = false
-    const timer = window.setTimeout(async () => {
-      setDirectoryLoading(true)
-      try {
-        const users = await workpalApi.listUsers(100, directoryQuery, directoryDepartmentID || undefined)
-        if (!disposed) {
-          setDirectoryUsers(sortUsers(users))
-          setActionError('')
-        }
-      } catch (error) {
-        if (!disposed) {
-          setActionError(error instanceof Error ? error.message : 'Unable to search the directory.')
-        }
-      } finally {
-        if (!disposed) {
-          setDirectoryLoading(false)
-        }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const commandPressed = event.ctrlKey || event.metaKey
+      if (commandPressed && event.key.toLocaleLowerCase() === 'k') {
+        event.preventDefault()
+        setModuleSwitcherOpen(true)
       }
-    }, 180)
-
-    return () => {
-      disposed = true
-      window.clearTimeout(timer)
+      if (commandPressed && event.key === '/') {
+        event.preventDefault()
+        setDrawerOpen(true)
+      }
+      if (event.key === 'Escape') {
+        setModuleSwitcherOpen(false)
+      }
     }
-  }, [directoryDepartmentID, directoryQuery, loading])
 
-  const documents = useMemo(() => {
-    const ownerUsername = currentUser?.username || username || 'admin'
-    return uploadedFiles
-      .map((file) => mapUploadedFileToDocument(file, ownerUsername, uploadShareCounts[file.id] ?? 0, locale))
-      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
-  }, [currentUser, locale, uploadShareCounts, uploadedFiles, username])
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   const formattedDate = useMemo(
     () =>
@@ -202,382 +92,89 @@ export default function WorkspacePage() {
     [locale],
   )
 
-  const displayNameByUsername = useMemo(() => {
-    const nameMap = new Map<string, string>()
-    teamMembers.forEach((user) => {
-      nameMap.set(user.username, user.nickname || user.username)
-    })
-    if (currentUser) {
-      nameMap.set(currentUser.username, currentUser.nickname || currentUser.username)
-    }
-    return nameMap
-  }, [currentUser, teamMembers])
+  const notifications = useMemo(() => {
+    const activeTasks = workspace.tasks.filter((task) => task.status !== 'done').length
+    const upcomingEvents = workspace.schedule.filter((event) => new Date(event.startsAt).getTime() >= Date.now()).length
+    return [
+      activeTasks > 0 ? `${t.overview.cards.activeTasks}: ${activeTasks}` : '',
+      upcomingEvents > 0 ? `${t.overview.cards.todayMeetings}: ${upcomingEvents}` : '',
+    ].filter(Boolean)
+  }, [t.overview.cards.activeTasks, t.overview.cards.todayMeetings, workspace.schedule, workspace.tasks])
 
-  const getDisplayName = (accountUsername: string): string => displayNameByUsername.get(accountUsername) ?? accountUsername
+  const openSection = (targetSection: WorkspaceSection) => navigate(`/workspace/${targetSection}`)
+  const requestConfirm = (request: ConfirmRequest) => setConfirmRequest(request)
 
-  if (!activeSection) {
-    return <Navigate to="/workspace/overview" replace />
-  }
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login', { replace: true })
-  }
-
-  const openSection = (targetSection: WorkspaceSection) => {
-    navigate(`/workspace/${targetSection}`)
-  }
-
-  const notify = (message: string) => {
-    setActionNotice(message)
-    setActionError('')
-  }
-
-  const fail = (message: string) => {
-    setActionNotice('')
-    setActionError(message)
-  }
-
-  const replaceTask = (updatedTask: WorkspaceTask) => {
-    setTasks((currentTasks) => currentTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)))
-  }
-
-  const handleAdvanceTask = async (taskID: string) => {
-    const task = tasks.find((item) => item.id === taskID)
-    if (!task) {
-      return
-    }
+  const handleConfirm = async () => {
+    if (!confirmRequest) return
+    setConfirmBusy(true)
     try {
-      const updatedTask = await workpalApi.updateTaskStatus(taskID, nextTaskStatus[task.status])
-      replaceTask(updatedTask)
-      notify(updatedTask.title)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to update the task.')
-    }
-  }
-
-  const handleResetTask = async (taskID: string) => {
-    try {
-      const updatedTask = await workpalApi.updateTaskStatus(taskID, 'planned')
-      replaceTask(updatedTask)
-      notify(updatedTask.title)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to reset the task.')
-    }
-  }
-
-  const handleAddTask = async (draft: CreateTaskInput) => {
-    try {
-      const createdTask = await workpalApi.createTask(draft)
-      setTasks((currentTasks) => [createdTask, ...currentTasks])
-      notify(createdTask.title)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to create the task.')
-    }
-  }
-
-  const handleDeleteTask = async (taskID: string) => {
-    try {
-      await workpalApi.deleteTask(taskID)
-      setTasks((currentTasks) => currentTasks.filter((task) => task.id !== taskID))
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to delete the task.')
-    }
-  }
-
-  const handleShareTask = async (taskID: string) => {
-    const task = tasks.find((item) => item.id === taskID)
-    if (!task) {
-      return
-    }
-
-    const copied = await copyText(`${task.title}\n${task.summary}\n${task.project}`)
-    if (!copied) {
-      fail('Unable to copy the task details.')
-      return
-    }
-
-    try {
-      const updatedTask = await workpalApi.shareTask(taskID)
-      replaceTask(updatedTask)
-      notify(task.title)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to share the task.')
-    }
-  }
-
-  const replaceEvent = (updatedEvent: ScheduleEvent) => {
-    setSchedule((currentEvents) => currentEvents.map((event) => (event.id === updatedEvent.id ? updatedEvent : event)))
-  }
-
-  const handleAddEvent = async (draft: CreateScheduleInput) => {
-    try {
-      const createdEvent = await workpalApi.createScheduleEvent(draft)
-      setSchedule((currentEvents) => [createdEvent, ...currentEvents])
-      notify(createdEvent.title)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to create the schedule event.')
-    }
-  }
-
-  const handleDeleteEvent = async (eventID: string) => {
-    try {
-      await workpalApi.deleteScheduleEvent(eventID)
-      setSchedule((currentEvents) => currentEvents.filter((event) => event.id !== eventID))
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to delete the schedule event.')
-    }
-  }
-
-  const handleShareEvent = async (eventID: string) => {
-    const event = schedule.find((item) => item.id === eventID)
-    if (!event) {
-      return
-    }
-
-    const copied = await copyText(`${event.title}\n${event.detail}\n${event.room}`)
-    if (!copied) {
-      fail('Unable to copy the schedule details.')
-      return
-    }
-
-    try {
-      const updatedEvent = await workpalApi.shareScheduleEvent(eventID)
-      replaceEvent(updatedEvent)
-      notify(event.title)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to share the schedule event.')
-    }
-  }
-
-  const handleUploadDocument = async (file: File) => {
-    setFilesUploading(true)
-    try {
-      const uploaded = await workpalApi.uploadUserFile(file)
-      setUploadedFiles((currentFiles) => [uploaded, ...currentFiles])
-      notify(uploaded.name)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to upload the file.')
+      await confirmRequest.onConfirm()
+      setConfirmRequest(null)
     } finally {
-      setFilesUploading(false)
+      setConfirmBusy(false)
     }
   }
 
-  const handleDeleteDocument = async (document: SharedDocument) => {
-    if (!document.fileId) {
-      return
-    }
-
-    try {
-      await workpalApi.deleteFile(document.fileId)
-      setUploadedFiles((currentFiles) => currentFiles.filter((file) => file.id !== document.fileId))
-      notify(document.title)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to delete the file.')
-    }
+  const requestLogout = () => {
+    requestConfirm({
+      title: t.confirm.signOutTitle,
+      message: t.confirm.signOutMessage,
+      confirmText: t.shell.signOut,
+      cancelText: t.common.cancel,
+      onConfirm: () => {
+        logout()
+        navigate('/login', { replace: true })
+      },
+    })
   }
 
-  const handleShareDocument = async (document: SharedDocument) => {
-    if (!document.fileId) {
-      return
-    }
-
-    try {
-      const shareInfo = await workpalApi.shareFile(document.fileId)
-      const copied = await copyText(shareInfo.share_text)
-      if (!copied) {
-        fail('Unable to copy the file share link.')
-        return
-      }
-
-      setUploadShareCounts((current) => ({
-        ...current,
-        [document.fileId as number]: (current[document.fileId as number] ?? 0) + 1,
-      }))
-      notify(shareInfo.share_text)
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'Unable to share the file.')
-    }
-  }
-
-  let sectionContent: JSX.Element
-  switch (activeSection) {
-    case 'overview':
-      sectionContent = (
-        <OverviewPanel
-          users={teamMembers}
-          tasks={tasks}
-          events={schedule}
-          documents={documents}
-          text={t}
-          getDisplayName={getDisplayName}
-          onOpenSection={openSection}
-        />
-      )
-      break
-    case 'chat':
-      sectionContent = <ChatPage teamMembers={teamMembers} text={t} />
-      break
-    case 'tasks':
-      sectionContent = (
-        <TasksPanel
-          users={teamMembers}
-          tasks={tasks}
-          text={t}
-          getDisplayName={getDisplayName}
-          onAdvanceTask={handleAdvanceTask}
-          onResetTask={handleResetTask}
-          onAddTask={handleAddTask}
-          onDeleteTask={handleDeleteTask}
-          onShareTask={(taskID) => {
-            void handleShareTask(taskID)
-          }}
-        />
-      )
-      break
-    case 'schedule':
-      sectionContent = (
-        <SchedulePanel
-          users={teamMembers}
-          events={schedule}
-          locale={locale}
-          text={t}
-          getDisplayName={getDisplayName}
-          onAddEvent={handleAddEvent}
-          onDeleteEvent={handleDeleteEvent}
-          onShareEvent={(eventID) => {
-            void handleShareEvent(eventID)
-          }}
-        />
-      )
-      break
-    case 'files':
-      sectionContent = (
-        <FilesPanel
-          documents={documents}
-          text={t}
-          getDisplayName={getDisplayName}
-          uploading={filesUploading}
-          onUpload={handleUploadDocument}
-          onDelete={handleDeleteDocument}
-          onShare={handleShareDocument}
-        />
-      )
-      break
-    case 'directory':
-      sectionContent = (
-        <DirectoryPanel
-          users={directoryUsers}
-          departments={departments}
-          query={directoryQuery}
-          selectedDepartmentId={directoryDepartmentID}
-          currentUserId={currentUser?.id ?? null}
-          text={t}
-          loading={directoryLoading}
-          onQueryChange={setDirectoryQuery}
-          onDepartmentChange={setDirectoryDepartmentID}
-        />
-      )
-      break
-  }
+  if (!isWorkspaceSection(section)) return <Navigate to="/workspace/overview" replace />
 
   return (
     <div className="workspace-shell">
-      <aside className="workspace-sidebar">
-        <div className="brand-block">
-          <strong>{t.common.workpal}</strong>
-          <span>{t.shell.subtitle}</span>
-        </div>
-
-        <nav className="workspace-nav" aria-label={t.common.workpal}>
-          {sectionOrder.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={item === activeSection ? 'nav-button active' : 'nav-button'}
-              aria-current={item === activeSection ? 'page' : undefined}
-              onClick={() => navigate(`/workspace/${item}`)}
-            >
-              <span>{t.navigation[item]}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <div className="profile-card">
-            <strong>{currentUser?.nickname || username || t.common.unavailable}</strong>
-            <span>@{currentUser?.username || username || 'guest'}</span>
-          </div>
-          <button type="button" className="secondary-button block-button" onClick={() => setDrawerOpen(true)}>
-            {t.shell.preferences}
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        activeSection={activeSection}
+        userInfo={workspace.currentUser}
+        username={username}
+        labels={t}
+        onNavigate={openSection}
+        onOpenSettings={() => setDrawerOpen(true)}
+      />
 
       <main className="workspace-main">
-        <header className="workspace-topbar">
-          <div>
-            <span className="eyebrow">
-              {t.shell.datePrefix} {formattedDate}
-            </span>
-            <h1>{t.navigation[activeSection]}</h1>
-            <p>{t.shell.liveData}</p>
-          </div>
-
-          <div className="topbar-actions">
-            <div className="segmented-control">
-              <button
-                type="button"
-                className={locale === 'en' ? 'segment-button active' : 'segment-button'}
-                aria-pressed={locale === 'en'}
-                onClick={() => setLocale('en')}
-              >
-                English
-              </button>
-              <button
-                type="button"
-                className={locale === 'zh-CN' ? 'segment-button active' : 'segment-button'}
-                aria-pressed={locale === 'zh-CN'}
-                onClick={() => setLocale('zh-CN')}
-              >
-                简体中文
-              </button>
-            </div>
-
-            <div className="segmented-control">
-              <button
-                type="button"
-                className={theme === 'light' ? 'segment-button active' : 'segment-button'}
-                aria-pressed={theme === 'light'}
-                onClick={() => setTheme('light')}
-              >
-                {t.settings.light}
-              </button>
-              <button
-                type="button"
-                className={theme === 'dark' ? 'segment-button active' : 'segment-button'}
-                aria-pressed={theme === 'dark'}
-                onClick={() => setTheme('dark')}
-              >
-                {t.settings.dark}
-              </button>
-            </div>
-
-            <button type="button" className="secondary-button" onClick={() => setDrawerOpen(true)}>
-              {t.shell.preferences}
-            </button>
-            <button type="button" className="secondary-button" onClick={handleLogout}>
-              {t.shell.signOut}
-            </button>
-          </div>
-        </header>
+        <Topbar
+          activeSection={activeSection}
+          formattedDate={formattedDate}
+          locale={locale}
+          theme={theme}
+          labels={t}
+          notifications={notifications}
+          onLocaleChange={setLocale}
+          onThemeChange={setTheme}
+          onOpenSettings={() => setDrawerOpen(true)}
+          onLogout={requestLogout}
+        />
 
         <div className="workspace-content">
-          {loadError ? <div className="banner-error" role="alert">{loadError}</div> : null}
-          {actionError ? <div className="banner-error" role="alert">{actionError}</div> : null}
-          {actionNotice ? <div className="banner-info" role="status">{actionNotice}</div> : null}
-          {!loading && teamMembers.length === 0 ? <div className="banner-info" role="status">{t.overview.noUsers}</div> : null}
-          {loading ? <div className="module-surface empty-panel" role="status">{t.common.loading}</div> : sectionContent}
+          {workspace.loadError ? <div className="banner-error" role="alert">{workspace.loadError}</div> : null}
+          {!workspace.loading && workspace.teamMembers.length === 0 ? (
+            <div className="banner-info" role="status">{t.overview.noUsers}</div>
+          ) : null}
+          <ErrorBoundary resetKey={activeSection} title="模块加载失败">
+            <Suspense fallback={<div className="module-surface empty-panel skeleton-panel" role="status">{t.common.loading}</div>}>
+              {workspace.loading ? <div className="module-surface empty-panel skeleton-panel" role="status">{t.common.loading}</div> : (
+                <WorkspaceContent
+                  activeSection={activeSection}
+                  locale={locale}
+                  text={t}
+                  workspace={workspace}
+                  actions={actions}
+                  onOpenSection={openSection}
+                  onConfirm={requestConfirm}
+                />
+              )}
+            </Suspense>
+          </ErrorBoundary>
         </div>
       </main>
 
@@ -595,6 +192,26 @@ export default function WorkspacePage() {
         onCompactModeChange={setCompactMode}
         onReset={resetPreferences}
       />
+      <ModuleSwitcher
+        open={moduleSwitcherOpen}
+        activeSection={activeSection}
+        sections={sectionOrder}
+        labels={t}
+        onNavigate={openSection}
+        onClose={() => setModuleSwitcherOpen(false)}
+      />
+      <ConfirmDialog
+        open={Boolean(confirmRequest)}
+        title={confirmRequest?.title ?? ''}
+        message={confirmRequest?.message ?? ''}
+        confirmText={confirmRequest?.confirmText ?? t.confirm.confirmAction}
+        cancelText={confirmRequest?.cancelText ?? t.common.cancel}
+        {...(confirmRequest?.variant ? { variant: confirmRequest.variant } : {})}
+        busy={confirmBusy}
+        onConfirm={() => void handleConfirm()}
+        onCancel={() => setConfirmRequest(null)}
+      />
+      <ToastViewport />
     </div>
   )
 }

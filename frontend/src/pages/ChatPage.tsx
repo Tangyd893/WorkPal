@@ -5,6 +5,7 @@ import CreateConversationModal from '../components/chat/CreateConversationModal'
 import GroupDetailsPanel from '../components/chat/GroupDetailsPanel'
 import { useChatController } from '../hooks/useChatController'
 import type { WorkspaceUser } from '../types/workspace'
+import { useNavigate, useParams } from 'react-router-dom'
 
 interface ChatPageProps {
   teamMembers: WorkspaceUser[]
@@ -12,7 +13,13 @@ interface ChatPageProps {
 }
 
 export default function ChatPage({ teamMembers, text }: ChatPageProps) {
-  const chat = useChatController()
+  const { conversationId } = useParams<{ conversationId: string }>()
+  const navigate = useNavigate()
+  const requestedConversationID = conversationId ? Number(conversationId) : undefined
+  const chat = useChatController(
+    Number.isFinite(requestedConversationID) ? requestedConversationID : undefined,
+    (nextConversationID) => navigate(`/workspace/chat/${nextConversationID}`),
+  )
   const showGroupDetails = chat.currentConversation?.type === 2
 
   return (
@@ -74,6 +81,7 @@ export default function ChatPage({ teamMembers, text }: ChatPageProps) {
             files={chat.groupFiles}
             filesLoading={chat.groupFilesLoading}
             uploading={chat.groupFileUploading}
+            uploadProgress={chat.groupUploadProgress}
             onAnnouncementChange={chat.setAnnouncementDraft}
             onSaveAnnouncement={chat.handleSaveAnnouncement}
             onUploadFile={chat.handleUploadGroupFile}

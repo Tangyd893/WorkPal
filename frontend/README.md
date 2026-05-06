@@ -1,21 +1,13 @@
-# WorkPal Frontend
+# WorkPal 前端
 
-This directory contains the React + Vite frontend for WorkPal.
+本目录是 WorkPal 的 React + Vite 前端。前端只访问 API 网关，开发代理由 `vite.config.ts` 维护：
 
-## What the frontend expects
+- `/api/*` 转发到 `http://localhost:8080`
+- `/ws` 转发到 `ws://localhost:8080`
 
-The frontend talks only to the API gateway at `http://localhost:8080`.
+## 启动方式
 
-Proxy rules in `vite.config.ts`:
-
-- `/api/*` -> `http://localhost:8080`
-- `/ws` -> `ws://localhost:8080`
-
-That means the frontend stays stable even though the backend is split into multiple domain services behind the gateway.
-
-## Start the frontend
-
-The frontend uses npm as the only package manager. Keep `package-lock.json` as the dependency lock file and install with `npm ci`.
+前端使用 npm 作为唯一包管理器，请保留 `package-lock.json`。
 
 ```powershell
 cd frontend
@@ -23,78 +15,45 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open:
+默认访问地址：
 
 ```text
 http://localhost:3000
 ```
 
-## Workspace modules
+## 工作台模块
 
-After login, the app routes into a workspace shell with these modules:
+登录后进入工作台，当前模块包括：
 
-- Overview
-- Chat
-- Tasks
-- Schedule
-- Files
-- Directory
+- 总览
+- 沟通
+- 任务
+- 日程
+- 文件
+- 通讯录
 
-## User-facing capabilities
+`/workspace/chat/:conversationId` 支持直达指定会话，其他模块使用 `/workspace/:section`。
 
-- seeded acceptance accounts shown on the login page
-- language switch: `English / 简体中文`
-- light and dark theme
-- message sound toggle
-- density toggle
-- direct chat and group chat
-- group announcement and group files
-- directory search by name, phone, title, employee number, and department
-- task create, update, share, and delete
-- schedule create, share, and delete
-- file upload, share, and delete
+## 目录结构
 
-## Source layout
+- `src/pages`：路由页面，包含登录、工作台、沟通和 404 页面。
+- `src/components`：通用组件、工作台组件、聊天组件。
+- `src/hooks`：工作台数据、业务操作、偏好设置、聊天控制器和 Toast 状态。
+- `src/stores`：认证、WebSocket 消息、会话状态。
+- `src/i18n`：中英文语言包。
+- `src/styles`：按设计令牌、重置、组件、布局、页面和工具类拆分的样式。
+- `src/test`：组件测试渲染工具。
 
-- `src/pages`: route-level pages such as `LoginPage`, `WorkspacePage`, and `ChatPage`
-- `src/components`: workspace and chat UI components
-- `src/api`: API wrappers and response unwrapping
-- `src/hooks`: auth, preferences, and chat controller state
-- `src/types`: shared TypeScript models
-- `src/data`: seeded login account display data
-- `src/styles`: global styles
-- `src/test`: small React/Vitest render helpers used by component tests
+## 关键交互
 
-## Backend-backed vs display-only data
+- 侧边栏固定高度，主内容区独立滚动。
+- 侧边栏分组折叠，移动端可收起导航。
+- Toast 操作反馈、危险操作确认框、文件上传进度条。
+- 任务可拖拽变更状态，日程支持列表和日历视图。
+- 文件支持图片/PDF 内联预览。
+- `Ctrl/Cmd + K` 打开模块切换器，`Ctrl/Cmd + /` 打开偏好设置。
 
-### Backend-backed
-
-- login
-- current user
-- users and departments
-- direct and group chat
-- message history and search
-- group announcement
-- group files
-- personal files
-- tasks
-- schedule
-
-### Display-only right now
-
-- overview summary composition
-
-## Non-functional baseline
-
-- package management is npm-only
-- ESLint is configured for `src`, `vite.config.ts`, and `vitest.config.ts`
-- Vitest covers API response unwrapping, auth/chat stores, preference persistence, i18n, login form semantics, settings drawer semantics, and file upload panel behavior
-- error banners use `role="alert"`; loading and informational banners use `role="status"`
-- modal surfaces use dialog semantics, and the settings drawer closes on Escape
-- segmented controls and selectable cards expose their selected state with ARIA attributes
-- global styles include keyboard `focus-visible` treatment and reduced-motion support
-
-## Tests
+## 自检命令
 
 ```powershell
 cd frontend
@@ -103,9 +62,4 @@ npm test
 npm run build
 ```
 
-End-to-end smoke:
-
-```powershell
-npx playwright install chromium
-node ..\testing\e2e\playwright.mjs
-```
+当前项目还在 CI 中执行类型检查、lint、测试和构建。若在受限沙箱中遇到 esbuild `spawn EPERM`，需要在允许子进程启动的环境中复跑 Vitest 或 Vite build。

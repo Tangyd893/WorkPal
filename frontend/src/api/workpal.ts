@@ -66,15 +66,19 @@ export const workpalApi = {
     return apiGet<WorkspaceUser>('/users/me')
   },
 
-  async listUsers(pageSize = 100, query = '', departmentId?: number): Promise<WorkspaceUser[]> {
-    const data = await apiGet<WorkspaceUser[] | PageData<WorkspaceUser>>('/users', {
+  async listUsers(pageSize = 100, query = '', departmentId?: number, signal?: AbortSignal): Promise<WorkspaceUser[]> {
+    const config = {
       params: {
         page: 1,
         page_size: pageSize,
         q: query || undefined,
         department_id: departmentId || undefined,
       },
-    })
+    }
+    const data = await apiGet<WorkspaceUser[] | PageData<WorkspaceUser>>(
+      '/users',
+      signal ? { ...config, signal } : config,
+    )
     return unwrapPageData(data)
   },
 
@@ -145,17 +149,33 @@ export const workpalApi = {
     return apiGet<ConversationFile[]>(`/conversations/${convID}/files`)
   },
 
-  uploadConversationFile(convID: number, file: File) {
+  uploadConversationFile(convID: number, file: File, onProgress?: (progress: number) => void) {
     const form = new FormData()
     form.set('conv_id', String(convID))
     form.set('file', file)
-    return apiPost<ConversationFile, FormData>('/files/upload', form)
+    return apiPost<ConversationFile, FormData>('/files/upload', form, {
+      onUploadProgress: (event) => {
+        if (!onProgress || !event.total) {
+          return
+        }
+
+        onProgress(Math.round((event.loaded / event.total) * 100))
+      },
+    })
   },
 
-  uploadUserFile(file: File) {
+  uploadUserFile(file: File, onProgress?: (progress: number) => void) {
     const form = new FormData()
     form.set('file', file)
-    return apiPost<ConversationFile, FormData>('/files/upload', form)
+    return apiPost<ConversationFile, FormData>('/files/upload', form, {
+      onUploadProgress: (event) => {
+        if (!onProgress || !event.total) {
+          return
+        }
+
+        onProgress(Math.round((event.loaded / event.total) * 100))
+      },
+    })
   },
 
   deleteFile(fileID: number) {

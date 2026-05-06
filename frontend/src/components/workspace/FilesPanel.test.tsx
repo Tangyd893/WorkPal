@@ -34,6 +34,7 @@ function renderFilesPanel(documents: SharedDocument[] = [], onUpload = vi.fn().m
       text={translations.en}
       getDisplayName={(username) => username}
       uploading={false}
+      uploadProgress={0}
       onUpload={onUpload}
       onDelete={vi.fn()}
       onShare={vi.fn()}

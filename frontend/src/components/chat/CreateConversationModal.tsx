@@ -86,6 +86,11 @@ export default function CreateConversationModal({
       return
     }
 
+    if (!groupName.trim()) {
+      setError(labels.invalidGroupName)
+      return
+    }
+
     if (groupMemberIds.length === 0) {
       setError(labels.invalidGroup)
       return
@@ -95,7 +100,7 @@ export default function CreateConversationModal({
     try {
       await onSubmit({
         mode: 'group',
-        name: groupName.trim() || labels.groupChat,
+        name: groupName.trim(),
         memberIds: groupMemberIds,
       })
     } catch (submitError) {

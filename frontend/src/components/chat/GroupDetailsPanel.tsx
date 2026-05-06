@@ -1,8 +1,10 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { AppTranslations } from '../../i18n'
 import type { Conversation } from '../../types/chat'
 import type { ConversationFile } from '../../types/workspace'
+import ConfirmDialog from '../ConfirmDialog'
+import ProgressBar from '../ProgressBar'
 
 interface GroupDetailsPanelProps {
   conversation: Conversation
@@ -13,6 +15,7 @@ interface GroupDetailsPanelProps {
   files: ConversationFile[]
   filesLoading: boolean
   uploading: boolean
+  uploadProgress: number
   onAnnouncementChange: (value: string) => void
   onSaveAnnouncement: () => Promise<void>
   onUploadFile: (file: File) => Promise<void>
@@ -37,6 +40,7 @@ export default function GroupDetailsPanel({
   files,
   filesLoading,
   uploading,
+  uploadProgress,
   onAnnouncementChange,
   onSaveAnnouncement,
   onUploadFile,
@@ -44,6 +48,7 @@ export default function GroupDetailsPanel({
   onShareFile,
 }: GroupDetailsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [deleteTargetID, setDeleteTargetID] = useState<number | null>(null)
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -53,6 +58,15 @@ export default function GroupDetailsPanel({
     }
 
     await onUploadFile(file)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (deleteTargetID === null) {
+      return
+    }
+
+    await onDeleteFile(deleteTargetID)
+    setDeleteTargetID(null)
   }
 
   return (
@@ -93,6 +107,7 @@ export default function GroupDetailsPanel({
         </div>
 
         <input ref={fileInputRef} type="file" className="visually-hidden" onChange={(event) => void handleFileChange(event)} />
+        {uploading ? <ProgressBar value={uploadProgress} label={common.upload} /> : null}
 
         {filesLoading ? <div className="empty-panel compact-empty">{common.loading}</div> : null}
 
@@ -113,7 +128,7 @@ export default function GroupDetailsPanel({
                   <button type="button" className="secondary-button" onClick={() => void onShareFile(file.id)}>
                     {labels.shareFile}
                   </button>
-                  <button type="button" className="secondary-button" onClick={() => void onDeleteFile(file.id)}>
+                  <button type="button" className="secondary-button" onClick={() => setDeleteTargetID(file.id)}>
                     {labels.deleteFile}
                   </button>
                 </div>
@@ -122,6 +137,16 @@ export default function GroupDetailsPanel({
           </div>
         ) : null}
       </section>
+      <ConfirmDialog
+        open={deleteTargetID !== null}
+        title={labels.deleteFile}
+        message={labels.deleteFileConfirm}
+        confirmText={labels.deleteFile}
+        cancelText={common.cancel}
+        variant="danger"
+        onConfirm={() => void handleConfirmDelete()}
+        onCancel={() => setDeleteTargetID(null)}
+      />
     </aside>
   )
 }

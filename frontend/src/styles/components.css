@@ -1,0 +1,162 @@
+.primary-button,
+.secondary-button,
+.segment-button,
+.nav-button,
+.conversation-item,
+.choice-card {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.primary-button,
+.secondary-button,
+.segment-button {
+  padding: 10px 14px;
+}
+
+.primary-button,
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: var(--shadow-soft);
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.block-button {
+  width: 100%;
+}
+
+.segmented-control {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-muted);
+}
+
+.segment-button {
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding-inline: 16px;
+}
+
+.segment-button.active {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-soft);
+}
+
+.card,
+.module-surface,
+.data-card,
+.board-column,
+.dialog-panel,
+.drawer-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.card,
+.module-surface,
+.data-card,
+.board-column {
+  border-radius: var(--radius-lg);
+}
+
+.form-item {
+  display: grid;
+  gap: 8px;
+}
+
+.form-item label,
+.form-copy strong,
+.settings-copy strong,
+.metric-label,
+.eyebrow,
+.subtle-label,
+.conversation-count,
+.message-time,
+.meta-pairs dt {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.form-stack,
+.module-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.form-copy,
+.settings-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.form-copy span,
+.settings-copy span,
+.panel-heading p,
+.stack-row p,
+.stack-row span,
+.person-card p,
+.conversation-copy span,
+.choice-card span,
+.profile-card span,
+.brand-block span,
+.login-card p,
+.helper-card p {
+  color: var(--text-secondary);
+}
+
+.error-msg,
+.banner-error {
+  background: var(--critical-soft);
+  color: var(--critical);
+  border: 1px solid rgba(185, 56, 47, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.banner-info {
+  background: var(--warning-soft);
+  color: var(--warning);
+  border: 1px solid rgba(148, 98, 0, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.empty-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  padding: var(--space-5);
+  text-align: center;
+  background: var(--bg-muted);
+}

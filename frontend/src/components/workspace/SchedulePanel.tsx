@@ -8,7 +8,7 @@ interface SchedulePanelProps {
   locale: Locale
   text: AppTranslations
   getDisplayName: (username: string) => string
-  onAddEvent: (draft: CreateScheduleInput) => void
+  onAddEvent: (draft: CreateScheduleInput) => Promise<void> | void
   onDeleteEvent: (eventId: string) => void
   onShareEvent: (eventId: string) => void
 }
@@ -22,6 +22,8 @@ interface ScheduleDraftState {
   attendees: string[]
   room: string
 }
+
+type ScheduleViewMode = 'list' | 'calendar'
 
 function formatStart(locale: Locale, value: string): string {
   const date = new Date(value)
@@ -63,6 +65,9 @@ export default function SchedulePanel({
 }: SchedulePanelProps) {
   const [formOpen, setFormOpen] = useState(false)
   const [draft, setDraft] = useState<ScheduleDraftState>(() => buildInitialDraft(users))
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [viewMode, setViewMode] = useState<ScheduleViewMode>('list')
 
   const sortedUsers = useMemo(
     () => [...users].sort((left, right) => (left.nickname || left.username).localeCompare(right.nickname || right.username)),
@@ -80,25 +85,70 @@ export default function SchedulePanel({
 
   const resetDraft = () => {
     setDraft(buildInitialDraft(sortedUsers))
+    setFormErrors({})
+    setSubmitting(false)
     setFormOpen(false)
   }
 
-  const handleCreate = () => {
-    if (!draft.title.trim() || !draft.ownerUsername) {
+  const validateDraft = () => {
+    const nextErrors: Record<string, string> = {}
+    if (!draft.title.trim()) {
+      nextErrors.title = text.validation.titleRequired
+    }
+    if (!draft.ownerUsername) {
+      nextErrors.ownerUsername = text.validation.ownerRequired
+    }
+    if (new Date(draft.startsAt).getTime() <= Date.now()) {
+      nextErrors.startsAt = text.validation.futureStartRequired
+    }
+    setFormErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
+  }
+
+  const handleCreate = async () => {
+    if (!validateDraft()) {
       return
     }
 
-    onAddEvent({
-      title: draft.title.trim(),
-      detail: draft.detail.trim(),
-      ownerUsername: draft.ownerUsername,
-      startsAt: new Date(draft.startsAt).toISOString(),
-      durationMinutes: Number(draft.durationMinutes) || 30,
-      attendees: Array.from(new Set([draft.ownerUsername, ...draft.attendees])),
-      room: draft.room.trim() || text.common.unavailable,
-    })
-    resetDraft()
+    setSubmitting(true)
+    try {
+      await onAddEvent({
+        title: draft.title.trim(),
+        detail: draft.detail.trim(),
+        ownerUsername: draft.ownerUsername,
+        startsAt: new Date(draft.startsAt).toISOString(),
+        durationMinutes: Number(draft.durationMinutes) || 30,
+        attendees: Array.from(new Set([draft.ownerUsername, ...draft.attendees])),
+        room: draft.room.trim() || text.common.unavailable,
+      })
+      resetDraft()
+    } finally {
+      setSubmitting(false)
+    }
   }
+
+  const calendarDays = useMemo(() => {
+    const now = new Date()
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    const leadingDays = firstDay.getDay()
+    const totalCells = Math.ceil((leadingDays + lastDay.getDate()) / 7) * 7
+
+    return Array.from({ length: totalCells }, (_, index) => {
+      const date = new Date(firstDay)
+      date.setDate(index - leadingDays + 1)
+      return date
+    })
+  }, [])
+
+  const eventsByDay = useMemo(() => {
+    const grouped = new Map<string, ScheduleEvent[]>()
+    events.forEach((event) => {
+      const key = new Date(event.startsAt).toISOString().slice(0, 10)
+      grouped.set(key, [...(grouped.get(key) ?? []), event])
+    })
+    return grouped
+  }, [events])
 
   return (
     <section className="module-stack">
@@ -107,9 +157,29 @@ export default function SchedulePanel({
           <h2>{text.schedule.title}</h2>
           <p>{text.schedule.subtitle}</p>
         </div>
-        <button type="button" className="primary-button" onClick={() => setFormOpen((current) => !current)}>
-          {text.schedule.addEvent}
-        </button>
+        <div className="status-row">
+          <div className="segmented-control">
+            <button
+              type="button"
+              className={viewMode === 'list' ? 'segment-button active' : 'segment-button'}
+              aria-pressed={viewMode === 'list'}
+              onClick={() => setViewMode('list')}
+            >
+              {text.schedule.listView}
+            </button>
+            <button
+              type="button"
+              className={viewMode === 'calendar' ? 'segment-button active' : 'segment-button'}
+              aria-pressed={viewMode === 'calendar'}
+              onClick={() => setViewMode('calendar')}
+            >
+              {text.schedule.calendarView}
+            </button>
+          </div>
+          <button type="button" className="primary-button" onClick={() => setFormOpen((current) => !current)}>
+            {text.schedule.addEvent}
+          </button>
+        </div>
       </div>
 
       <div className="banner-info">{text.schedule.addHint}</div>
@@ -124,7 +194,9 @@ export default function SchedulePanel({
                 type="text"
                 value={draft.title}
                 onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                aria-invalid={Boolean(formErrors.title)}
               />
+              {formErrors.title ? <span className="error-text">{formErrors.title}</span> : null}
             </div>
             <div className="form-item">
               <label htmlFor="event-owner">{text.schedule.ownerLabel}</label>
@@ -132,6 +204,7 @@ export default function SchedulePanel({
                 id="event-owner"
                 value={draft.ownerUsername}
                 onChange={(event) => setDraft((current) => ({ ...current, ownerUsername: event.target.value }))}
+                aria-invalid={Boolean(formErrors.ownerUsername)}
               >
                 {sortedUsers.map((user) => (
                   <option key={user.id} value={user.username}>
@@ -139,6 +212,7 @@ export default function SchedulePanel({
                   </option>
                 ))}
               </select>
+              {formErrors.ownerUsername ? <span className="error-text">{formErrors.ownerUsername}</span> : null}
             </div>
             <div className="form-item">
               <label htmlFor="event-start">{text.schedule.starts}</label>
@@ -147,7 +221,9 @@ export default function SchedulePanel({
                 type="datetime-local"
                 value={draft.startsAt}
                 onChange={(event) => setDraft((current) => ({ ...current, startsAt: event.target.value }))}
+                aria-invalid={Boolean(formErrors.startsAt)}
               />
+              {formErrors.startsAt ? <span className="error-text">{formErrors.startsAt}</span> : null}
             </div>
             <div className="form-item">
               <label htmlFor="event-duration">{text.schedule.duration}</label>
@@ -203,14 +279,37 @@ export default function SchedulePanel({
             <button type="button" className="secondary-button" onClick={resetDraft}>
               {text.common.cancel}
             </button>
-            <button type="button" className="primary-button" onClick={handleCreate}>
-              {text.schedule.createAction}
+            <button type="button" className="primary-button" onClick={() => void handleCreate()} disabled={submitting}>
+              {submitting ? text.common.loading : text.schedule.createAction}
             </button>
           </div>
         </section>
       ) : null}
 
-      <div className="list-grid">
+      {viewMode === 'calendar' ? (
+        <div className="calendar-grid">
+          {calendarDays.map((day) => {
+            const key = day.toISOString().slice(0, 10)
+            const dayEvents = eventsByDay.get(key) ?? []
+            const inCurrentMonth = day.getMonth() === new Date().getMonth()
+
+            return (
+              <section key={key} className={inCurrentMonth ? 'calendar-cell' : 'calendar-cell muted'}>
+                <strong>{day.getDate()}</strong>
+                <div className="calendar-events">
+                  {dayEvents.slice(0, 3).map((event) => (
+                    <span key={event.id} className="calendar-event">
+                      {event.title}
+                    </span>
+                  ))}
+                  {dayEvents.length > 3 ? <span className="subtle-label">+{dayEvents.length - 3}</span> : null}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="list-grid">
         {events.length === 0 ? <div className="empty-panel">{text.schedule.empty}</div> : null}
 
         {events.map((event) => (
@@ -259,7 +358,8 @@ export default function SchedulePanel({
             </div>
           </article>
         ))}
-      </div>
+        </div>
+      )}
     </section>
   )
 }

@@ -31,7 +31,7 @@ function sortFiles(files: ConversationFile[]): ConversationFile[] {
   )
 }
 
-export function useChatController() {
+export function useChatController(requestedConversationID?: number, onConversationChange?: (conversationID: number) => void) {
   const { username, userId, token } = useAuthStore()
   const { conversations, setConversations, activeConvID, setActiveConvID } = useConvStore()
   const { connected, setConnected, setWS, addMessage, messages, setMessages } = useWSStore()
@@ -48,6 +48,7 @@ export function useChatController() {
   const [groupFiles, setGroupFiles] = useState<ConversationFile[]>([])
   const [groupFilesLoading, setGroupFilesLoading] = useState(false)
   const [groupFileUploading, setGroupFileUploading] = useState(false)
+  const [groupUploadProgress, setGroupUploadProgress] = useState(0)
   const [announcementDraft, setAnnouncementDraft] = useState('')
   const [announcementSaving, setAnnouncementSaving] = useState(false)
 
@@ -101,8 +102,12 @@ export function useChatController() {
       return
     }
 
+    const routeConversation =
+      typeof requestedConversationID === 'number'
+        ? nextConversations.find((conversation) => conversation.id === requestedConversationID)
+        : null
     const fallbackConversation =
-      nextConversations.find((conversation) => conversation.id === activeConvID) ?? nextConversations[0] ?? null
+      routeConversation ?? nextConversations.find((conversation) => conversation.id === activeConvID) ?? nextConversations[0] ?? null
 
     if (!fallbackConversation) {
       return
@@ -112,7 +117,7 @@ export function useChatController() {
     if (!messages[fallbackConversation.id]) {
       await loadMessages(fallbackConversation.id)
     }
-  }, [activeConvID, loadMessages, messages, setActiveConvID, setConversations])
+  }, [activeConvID, loadMessages, messages, requestedConversationID, setActiveConvID, setConversations])
 
   const handleSocketMessage = useCallback(
     (event: MessageEvent<string>) => {
@@ -246,8 +251,11 @@ export function useChatController() {
   }, [currentConversation])
 
   const handleSelectConversation = useCallback(
-    async (conversation: Conversation) => {
+    async (conversation: Conversation, syncRoute = true) => {
       setActiveConvID(conversation.id)
+      if (syncRoute) {
+        onConversationChange?.(conversation.id)
+      }
       setSearchQuery('')
       setSearchResults([])
       setSearchActive(false)
@@ -262,8 +270,19 @@ export function useChatController() {
         }
       }
     },
-    [loadMessages, messages, setActiveConvID],
+    [loadMessages, messages, onConversationChange, setActiveConvID],
   )
+
+  useEffect(() => {
+    if (typeof requestedConversationID !== 'number' || requestedConversationID === activeConvID) {
+      return
+    }
+
+    const requestedConversation = conversations.find((conversation) => conversation.id === requestedConversationID)
+    if (requestedConversation) {
+      void handleSelectConversation(requestedConversation, false)
+    }
+  }, [activeConvID, conversations, handleSelectConversation, requestedConversationID])
 
   const handleSend = useCallback(async () => {
     const trimmedInput = input.trim()
@@ -315,6 +334,7 @@ export function useChatController() {
       const conversation = await workpalApi.createConversation(draft)
       await loadConversations()
       setActiveConvID(conversation.id)
+      onConversationChange?.(conversation.id)
       await loadMessages(conversation.id)
       setSearchQuery('')
       setSearchResults([])
@@ -323,7 +343,7 @@ export function useChatController() {
       setError('')
       setNotice('')
     },
-    [loadConversations, loadMessages, setActiveConvID],
+    [loadConversations, loadMessages, onConversationChange, setActiveConvID],
   )
 
   const handleSaveAnnouncement = useCallback(async () => {
@@ -351,14 +371,17 @@ export function useChatController() {
       }
 
       setGroupFileUploading(true)
+      setGroupUploadProgress(0)
       try {
-        const uploaded = await workpalApi.uploadConversationFile(currentConversation.id, file)
+        const uploaded = await workpalApi.uploadConversationFile(currentConversation.id, file, setGroupUploadProgress)
+        setGroupUploadProgress(100)
         setGroupFiles((current) => sortFiles([uploaded, ...current]))
         setNotice(uploaded.name)
         setError('')
       } catch (uploadError) {
         setError(getErrorMessage(uploadError))
       } finally {
+        window.setTimeout(() => setGroupUploadProgress(0), 300)
         setGroupFileUploading(false)
       }
     },
@@ -394,10 +417,19 @@ export function useChatController() {
 
       try {
         const updated = await workpalApi.editMessage(messageID, content)
+        const updatedMessage = updated as ChatMessage & { updated_at?: string }
         const current = messages[activeConvID] ?? []
         setMessages(
           activeConvID,
-          current.map((msg) => (msg.id === messageID ? { ...msg, content: updated.content, updated_at: (updated as Record<string, string>).updated_at } : msg)),
+          current.map((msg) =>
+            msg.id === messageID
+              ? {
+                  ...msg,
+                  content: updated.content,
+                  ...(updatedMessage.updated_at ? { updated_at: updatedMessage.updated_at } : {}),
+                }
+              : msg,
+          ),
         )
         setError('')
       } catch (editError) {
@@ -441,6 +473,7 @@ export function useChatController() {
     groupFileUploading,
     groupFiles,
     groupFilesLoading,
+    groupUploadProgress,
     input,
     messagesEndRef,
     notice,

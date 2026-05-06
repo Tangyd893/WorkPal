@@ -40,7 +40,7 @@ function renderPanel(users = mockUsers, loading = false) {
 describe('DirectoryPanel', () => {
   it('renders the directory title and search input', () => {
     renderPanel()
-    expect(view?.container.textContent).toContain('Directory')
+    expect(view?.container.textContent).toContain('People directory')
     const searchInput = view?.container.querySelector('input[type="search"]')
     expect(searchInput).not.toBeNull()
   })
@@ -56,11 +56,11 @@ describe('DirectoryPanel', () => {
   it('renders user cards in the directory grid', () => {
     renderPanel()
     const cards = view?.container.querySelectorAll('.person-card')
-    expect(cards.length).toBe(2)
+    expect(cards?.length).toBe(2)
   })
 
   it('renders user details including email and phone', () => {
-    renderPanel([mockUsers[0]])
+    renderPanel([mockUsers[0]!])
     expect(view?.container.textContent).toContain('admin@example.com')
     expect(view?.container.textContent).toContain('1234')
   })
@@ -79,7 +79,7 @@ describe('DirectoryPanel', () => {
 
   it('shows no results message when users array is empty', () => {
     renderPanel([])
-    expect(view?.container.textContent).toContain('No staff profiles match the current filters.')
+    expect(view?.container.textContent).toContain('No matching teammates.')
   })
 
   it('shows loading state when loading is true', () => {

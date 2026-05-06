@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import type { DragEvent } from 'react'
 import type { AppTranslations } from '../../i18n'
 import type { CreateTaskInput, TaskPriority, TaskStatus, WorkspaceTask, WorkspaceUser } from '../../types/workspace'
 
@@ -9,9 +10,10 @@ interface TasksPanelProps {
   getDisplayName: (username: string) => string
   onAdvanceTask: (taskId: string) => void
   onResetTask: (taskId: string) => void
-  onAddTask: (draft: CreateTaskInput) => void
+  onAddTask: (draft: CreateTaskInput) => Promise<void> | void
   onDeleteTask: (taskId: string) => void
   onShareTask: (taskId: string) => void
+  onUpdateTaskStatus: (taskId: string, status: TaskStatus) => void
 }
 
 interface TaskDraftState {
@@ -48,9 +50,13 @@ export default function TasksPanel({
   onAddTask,
   onDeleteTask,
   onShareTask,
+  onUpdateTaskStatus,
 }: TasksPanelProps) {
   const [formOpen, setFormOpen] = useState(false)
   const [draft, setDraft] = useState<TaskDraftState>(() => buildInitialDraft(users))
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [draggingTaskID, setDraggingTaskID] = useState<string | null>(null)
 
   const sortedUsers = useMemo(
     () => [...users].sort((left, right) => (left.nickname || left.username).localeCompare(right.nickname || right.username)),
@@ -68,24 +74,60 @@ export default function TasksPanel({
 
   const resetDraft = () => {
     setDraft(buildInitialDraft(sortedUsers))
+    setFormErrors({})
+    setSubmitting(false)
     setFormOpen(false)
   }
 
-  const handleCreate = () => {
-    if (!draft.title.trim() || !draft.ownerUsername) {
+  const validateDraft = () => {
+    const nextErrors: Record<string, string> = {}
+    if (!draft.title.trim()) {
+      nextErrors.title = text.validation.titleRequired
+    } else if (draft.title.trim().length < 2) {
+      nextErrors.title = text.validation.titleTooShort
+    }
+    if (draft.summary.length > 500) {
+      nextErrors.summary = text.validation.summaryTooLong
+    }
+    if (!draft.ownerUsername) {
+      nextErrors.ownerUsername = text.validation.ownerRequired
+    }
+    setFormErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
+  }
+
+  const handleCreate = async () => {
+    if (!validateDraft()) {
       return
     }
 
-    onAddTask({
-      title: draft.title.trim(),
-      summary: draft.summary.trim(),
-      project: draft.project.trim() || 'General',
-      ownerUsername: draft.ownerUsername,
-      teammates: draft.teammates.filter((item) => item !== draft.ownerUsername),
-      dueDate: draft.dueDate,
-      priority: draft.priority,
-    })
-    resetDraft()
+    setSubmitting(true)
+    try {
+      await onAddTask({
+        title: draft.title.trim(),
+        summary: draft.summary.trim(),
+        project: draft.project.trim() || 'General',
+        ownerUsername: draft.ownerUsername,
+        teammates: draft.teammates.filter((item) => item !== draft.ownerUsername),
+        dueDate: draft.dueDate,
+        priority: draft.priority,
+      })
+      resetDraft()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDrop = (event: DragEvent<HTMLElement>, status: TaskStatus) => {
+    event.preventDefault()
+    const taskID = draggingTaskID ?? event.dataTransfer.getData('text/plain')
+    const task = tasks.find((item) => item.id === taskID)
+    setDraggingTaskID(null)
+    if (!task || task.status === status) {
+      return
+    }
+
+    onUpdateTaskStatus(task.id, status)
   }
 
   return (
@@ -112,7 +154,9 @@ export default function TasksPanel({
                 type="text"
                 value={draft.title}
                 onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                aria-invalid={Boolean(formErrors.title)}
               />
+              {formErrors.title ? <span className="error-text">{formErrors.title}</span> : null}
             </div>
             <div className="form-item">
               <label htmlFor="task-project">{text.tasks.projectLabel}</label>
@@ -129,6 +173,7 @@ export default function TasksPanel({
                 id="task-owner"
                 value={draft.ownerUsername}
                 onChange={(event) => setDraft((current) => ({ ...current, ownerUsername: event.target.value }))}
+                aria-invalid={Boolean(formErrors.ownerUsername)}
               >
                 {sortedUsers.map((user) => (
                   <option key={user.id} value={user.username}>
@@ -136,6 +181,7 @@ export default function TasksPanel({
                   </option>
                 ))}
               </select>
+              {formErrors.ownerUsername ? <span className="error-text">{formErrors.ownerUsername}</span> : null}
             </div>
             <div className="form-item">
               <label htmlFor="task-due">{text.tasks.due}</label>
@@ -172,7 +218,9 @@ export default function TasksPanel({
                 rows={3}
                 value={draft.summary}
                 onChange={(event) => setDraft((current) => ({ ...current, summary: event.target.value }))}
+                aria-invalid={Boolean(formErrors.summary)}
               />
+              {formErrors.summary ? <span className="error-text">{formErrors.summary}</span> : null}
             </div>
             <div className="form-item two-column-span">
               <label>{text.tasks.teammates}</label>
@@ -194,8 +242,8 @@ export default function TasksPanel({
             <button type="button" className="secondary-button" onClick={resetDraft}>
               {text.common.cancel}
             </button>
-            <button type="button" className="primary-button" onClick={handleCreate}>
-              {text.tasks.createAction}
+            <button type="button" className="primary-button" onClick={() => void handleCreate()} disabled={submitting}>
+              {submitting ? text.common.loading : text.tasks.createAction}
             </button>
           </div>
         </section>
@@ -206,7 +254,12 @@ export default function TasksPanel({
           const columnTasks = tasks.filter((task) => task.status === status)
 
           return (
-            <section key={status} className="board-column">
+            <section
+              key={status}
+              className="board-column"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => handleDrop(event, status)}
+            >
               <div className="board-column-header">
                 <strong>{text.tasks.statuses[status]}</strong>
                 <span>{columnTasks.length}</span>
@@ -215,7 +268,17 @@ export default function TasksPanel({
                 {columnTasks.length === 0 ? <div className="empty-panel compact-empty">{text.tasks.empty}</div> : null}
 
                 {columnTasks.map((task) => (
-                  <article key={task.id} className="task-card">
+                  <article
+                    key={task.id}
+                    className={draggingTaskID === task.id ? 'task-card dragging' : 'task-card'}
+                    draggable
+                    onDragStart={(event) => {
+                      setDraggingTaskID(task.id)
+                      event.dataTransfer.setData('text/plain', task.id)
+                      event.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onDragEnd={() => setDraggingTaskID(null)}
+                  >
                     <div className="task-card-top">
                       <span className="chip">{task.project}</span>
                       <span className="chip subtle">{text.tasks.priorities[task.priority]}</span>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { KeyboardEvent, RefObject } from 'react'
 import type { AppTranslations } from '../../i18n'
 import type { ChatMessage, Conversation } from '../../types/chat'
+import ConfirmDialog from '../ConfirmDialog'
 
 interface ConversationPaneProps {
   conversation: Conversation | null
@@ -64,6 +65,7 @@ export default function ConversationPane({
 }: ConversationPaneProps) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
+  const [recallTargetID, setRecallTargetID] = useState<number | null>(null)
 
   const handleInputKeyDown = async (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== 'Enter') {
@@ -98,6 +100,15 @@ export default function ConversationPane({
     await onCommitEdit(editingId, trimmed)
     setEditingId(null)
     setEditDraft('')
+  }
+
+  const handleConfirmRecall = async () => {
+    if (recallTargetID === null) {
+      return
+    }
+
+    await onRecallMessage(recallTargetID)
+    setRecallTargetID(null)
   }
 
   if (!conversation) {
@@ -197,7 +208,7 @@ export default function ConversationPane({
                   <button
                     type="button"
                     className="action-link"
-                    onClick={() => void onRecallMessage(message.id)}
+                    onClick={() => setRecallTargetID(message.id)}
                     aria-label={labels.recallMessage}
                   >
                     {labels.recallMessage}
@@ -232,6 +243,17 @@ export default function ConversationPane({
           {labels.send}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={recallTargetID !== null}
+        title={labels.recallMessage}
+        message={labels.recallConfirmMessage}
+        confirmText={labels.recallMessage}
+        cancelText={commonLabels.cancel}
+        variant="danger"
+        onConfirm={() => void handleConfirmRecall()}
+        onCancel={() => setRecallTargetID(null)}
+      />
     </section>
   )
 }

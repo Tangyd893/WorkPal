@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import { useAuthStore } from './hooks/useAuthStore'
 import { usePreferencesStore } from './hooks/usePreferencesStore'
 import LoginPage from './pages/LoginPage'
+import NotFoundPage from './pages/NotFoundPage'
 import WorkspacePage from './pages/WorkspacePage'
 
 function ProtectedRoute() {
@@ -40,19 +42,22 @@ function PreferenceBridge() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <PreferenceBridge />
-      <Routes>
-        <Route path="/login" element={<LoginRoute />} />
-        <Route element={<ProtectedRoute />}>
-          <Route element={<Layout />}>
-            <Route index element={<Navigate to="/workspace/overview" replace />} />
-            <Route path="/chat" element={<Navigate to="/workspace/chat" replace />} />
-            <Route path="/workspace/:section" element={<WorkspacePage />} />
+    <ErrorBoundary title="WorkPal 加载失败" message="应用渲染时出现异常，可以重试当前页面。">
+      <BrowserRouter>
+        <PreferenceBridge />
+        <Routes>
+          <Route path="/login" element={<LoginRoute />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<Layout />}>
+              <Route index element={<Navigate to="/workspace/overview" replace />} />
+              <Route path="/chat" element={<Navigate to="/workspace/chat" replace />} />
+              <Route path="/workspace/:section" element={<WorkspacePage />} />
+              <Route path="/workspace/chat/:conversationId" element={<WorkspacePage />} />
+            </Route>
           </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/workspace/overview" replace />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

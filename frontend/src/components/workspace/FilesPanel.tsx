@@ -1,13 +1,15 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { AppTranslations } from '../../i18n'
 import type { SharedDocument } from '../../types/workspace'
+import ProgressBar from '../ProgressBar'
 
 interface FilesPanelProps {
   documents: SharedDocument[]
   text: AppTranslations
   getDisplayName: (username: string) => string
   uploading: boolean
+  uploadProgress: number
   onUpload: (file: File) => Promise<void>
   onDelete: (document: SharedDocument) => Promise<void> | void
   onShare: (document: SharedDocument) => Promise<void> | void
@@ -21,8 +23,29 @@ function formatUpdatedAt(value: string): string {
   return date.toLocaleString()
 }
 
-export default function FilesPanel({ documents, text, getDisplayName, uploading, onUpload, onDelete, onShare }: FilesPanelProps) {
+function getPreviewKind(document: SharedDocument): 'image' | 'pdf' | 'other' {
+  const value = `${document.attachmentName ?? ''} ${document.attachmentUrl ?? ''}`.toLocaleLowerCase()
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|$|\s)/.test(value)) {
+    return 'image'
+  }
+  if (/\.pdf(\?|$|\s)/.test(value)) {
+    return 'pdf'
+  }
+  return 'other'
+}
+
+export default function FilesPanel({
+  documents,
+  text,
+  getDisplayName,
+  uploading,
+  uploadProgress,
+  onUpload,
+  onDelete,
+  onShare,
+}: FilesPanelProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [previewDocument, setPreviewDocument] = useState<SharedDocument | null>(null)
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -61,6 +84,7 @@ export default function FilesPanel({ documents, text, getDisplayName, uploading,
       />
 
       <div className="banner-info" role="status">{text.files.uploadHint}</div>
+      {uploading ? <ProgressBar value={uploadProgress} label={text.files.uploadProgress} /> : null}
 
       {documents.length === 0 ? (
         <div className="empty-panel" role="status">{text.files.empty}</div>
@@ -102,6 +126,11 @@ export default function FilesPanel({ documents, text, getDisplayName, uploading,
 
               <div className="task-actions">
                 {document.attachmentUrl ? (
+                  <button type="button" className="secondary-button" onClick={() => setPreviewDocument(document)}>
+                    {text.files.previewAction}
+                  </button>
+                ) : null}
+                {document.attachmentUrl ? (
                   <a className="secondary-button button-link" href={document.attachmentUrl} target="_blank" rel="noreferrer noopener">
                     {text.files.openAction}
                   </a>
@@ -117,6 +146,31 @@ export default function FilesPanel({ documents, text, getDisplayName, uploading,
           ))}
         </div>
       )}
+
+      {previewDocument?.attachmentUrl ? (
+        <dialog className="preview-dialog" open aria-labelledby="file-preview-title">
+          <div className="dialog-header">
+            <div>
+              <h3 id="file-preview-title">{text.files.previewTitle}</h3>
+              <p>{previewDocument.title}</p>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => setPreviewDocument(null)}>
+              {text.common.close}
+            </button>
+          </div>
+          <div className="preview-body">
+            {getPreviewKind(previewDocument) === 'image' ? (
+              <img src={previewDocument.attachmentUrl} alt={previewDocument.title} />
+            ) : getPreviewKind(previewDocument) === 'pdf' ? (
+              <iframe title={previewDocument.title} src={previewDocument.attachmentUrl} />
+            ) : (
+              <a className="primary-button button-link" href={previewDocument.attachmentUrl} target="_blank" rel="noreferrer noopener">
+                {text.files.openAction}
+              </a>
+            )}
+          </div>
+        </dialog>
+      ) : null}
     </section>
   )
 }
