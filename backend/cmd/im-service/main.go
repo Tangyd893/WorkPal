@@ -87,8 +87,10 @@ func main() {
 		platform.RedisHealthCheck("redis", redisClient),
 	)
 	apiV1 := r.Group("/api/v1")
+	channelHandler := handler.NewChannelHandler()
 	convHandler.RegisterRoutes(apiV1)
 	msgHandler.RegisterRoutes(apiV1)
+	channelHandler.RegisterRoutes(apiV1)
 	convHandler.RegisterInternalRoutes(r.Group(""), cfg.Server.InternalToken)
 	registerWebSocket(r, wsHandler)
 

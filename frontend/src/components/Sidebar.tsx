@@ -11,7 +11,7 @@ interface SidebarProps {
   onOpenSettings: () => void
 }
 
-type NavigationGroupID = 'overview' | 'collaboration' | 'work' | 'assets'
+type NavigationGroupID = 'overview' | 'collaboration' | 'work' | 'projects' | 'assets'
 
 interface NavigationItem {
   section: WorkspaceSection
@@ -37,6 +37,12 @@ const navigationGroups: NavigationGroup[] = [
     items: [
       { section: 'tasks', icon: 'M5 12l4 4L19 6M5 20h14' },
       { section: 'schedule', icon: 'M7 3v4m10-4v4M4 9h16M5 5h14v16H5z' },
+    ],
+  },
+  {
+    id: 'projects',
+    items: [
+      { section: 'projects' as WorkspaceSection, icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z' },
     ],
   },
   { id: 'assets', items: [{ section: 'files', icon: 'M5 4h6l2 3h6v13H5z' }] },

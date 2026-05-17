@@ -42,7 +42,7 @@ export interface AppTranslations {
     helperTitle: string
     helperItems: string[]
   }
-  navigation: Record<'overview' | 'chat' | 'tasks' | 'schedule' | 'files' | 'directory', string>
+  navigation: Record<'overview' | 'chat' | 'tasks' | 'schedule' | 'files' | 'directory' | 'projects', string>
   shell: {
     subtitle: string
     welcome: string
@@ -54,7 +54,7 @@ export interface AppTranslations {
     moduleSwitcherHint: string
     notifications: string
     noNotifications: string
-    navGroups: Record<'overview' | 'collaboration' | 'work' | 'assets', string>
+    navGroups: Record<'overview' | 'collaboration' | 'work' | 'assets' | 'projects', string>
   }
   confirm: {
     confirmAction: string
@@ -249,6 +249,42 @@ export interface AppTranslations {
     recallMessage: string
     recallConfirmMessage: string
     deleteFileConfirm: string
+  }
+  projects: {
+    title: string
+    subtitle: string
+    addProject: string
+    addProjectHint: string
+    projectKey: string
+    projectName: string
+    projectCategory: string
+    createProject: string
+    emptyProjects: string
+    selectProject: string
+    addIssue: string
+    addIssueHint: string
+    issueSummary: string
+    issueDesc: string
+    issuePriority: string
+    issueType: string
+    issueAssignee: string
+    createIssue: string
+    emptyIssues: string
+    backlog: string
+    inProgress: string
+    inReview: string
+    done: string
+    deleteProject: string
+    deleteIssue: string
+    confirmDeleteProject: string
+    confirmDeleteIssue: string
+    viewChangelog: string
+    noChangelogs: string
+    priorities: Record<'Critical' | 'High' | 'Medium' | 'Low', string>
+    issueTypes: Record<'Epic' | 'Story' | 'Task' | 'Sub-task' | 'Bug', string>
+    sortBy: string
+    summaryLabel: string
+    keyLabel: string
   }
   status: {
     online: string

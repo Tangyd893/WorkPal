@@ -50,3 +50,5 @@ backend/configs/config.yaml
 backend/data/
 backend/uploads/
 .gocache/
+.agents/
+skills-lock.json

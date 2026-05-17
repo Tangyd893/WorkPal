@@ -1,4 +1,4 @@
-.PHONY: deps run-gateway run-user run-im run-file run-search run-workspace test build-services docker-up docker-down lint clean help migrate-install migrate-up migrate-down migrate-create
+.PHONY: deps run-gateway run-user run-im run-file run-search run-workspace run-project run-notification test build-services docker-up docker-down lint clean help migrate-install migrate-up migrate-down migrate-create
 
 # Go parameters
 GOCMD=go
@@ -31,6 +31,12 @@ run-search:
 run-workspace:
 	$(GOCMD) run ./cmd/workspace-service
 
+run-project:
+	$(GOCMD) run ./cmd/project-service
+
+run-notification:
+	$(GOCMD) run ./cmd/notification-service
+
 build-services:
 	mkdir -p bin
 	CGO_ENABLED=0 $(GOBUILD) -o bin/gateway ./cmd/gateway
@@ -39,6 +45,8 @@ build-services:
 	CGO_ENABLED=0 $(GOBUILD) -o bin/file-service ./cmd/file-service
 	CGO_ENABLED=0 $(GOBUILD) -o bin/search-service ./cmd/search-service
 	CGO_ENABLED=0 $(GOBUILD) -o bin/workspace-service ./cmd/workspace-service
+	CGO_ENABLED=0 $(GOBUILD) -o bin/project-service ./cmd/project-service
+	CGO_ENABLED=0 $(GOBUILD) -o bin/notification-service ./cmd/notification-service
 
 test:
 	$(GOTEST) -v -race -cover ./...
@@ -70,7 +78,9 @@ help:
 	@echo "  make run-im      - Run IM service"
 	@echo "  make run-file    - Run file service"
 	@echo "  make run-search  - Run search service"
-	@echo "  make run-workspace - Run workspace service"
+  @echo "  make run-workspace - Run workspace service"
+  @echo "  make run-project  - Run project service"
+  @echo "  make run-notification - Run notification service"
   @echo "  make test            - Run tests"
   @echo "  make lint            - Run golangci-lint"
   @echo "  make migrate-install - Install golang-migrate CLI"

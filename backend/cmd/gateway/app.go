@@ -272,6 +272,8 @@ func buildUpstreamServices(cfg *config.Config, registryClient *redis.Client) ([]
 		{name: "file-service", baseURL: cfg.Services.FileURL, timeoutMS: timeoutCfg.FileMS},
 		{name: "search-service", baseURL: cfg.Services.SearchURL, timeoutMS: timeoutCfg.SearchMS},
 		{name: "workspace-service", baseURL: cfg.Services.WorkspaceURL, timeoutMS: timeoutCfg.WorkspaceMS},
+		{name: "project-service", baseURL: cfg.Services.ProjectURL, timeoutMS: timeoutCfg.ProjectMS},
+		{name: "notification-service", baseURL: cfg.Services.NotificationURL, timeoutMS: timeoutCfg.DefaultMS},
 	}
 
 	services := make([]*upstreamService, 0, len(specs))
@@ -345,6 +347,14 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 	if err != nil {
 		return nil, err
 	}
+	projectService, err := resolve("project-service")
+	if err != nil {
+		return nil, err
+	}
+	notificationService, err := resolve("notification-service")
+	if err != nil {
+		return nil, err
+	}
 
 	return []*routeSpec{
 		{
@@ -405,6 +415,18 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 			description: "Schedule CRUD and share endpoints.",
 		},
 		{
+			name:        "project-projects",
+			service:     projectService,
+			prefixPath:  "/api/v1/projects",
+			description: "Project CRUD, issue management, and type listing endpoints.",
+		},
+		{
+			name:        "project-issues",
+			service:     projectService,
+			prefixPath:  "/api/v1/issues",
+			description: "Issue detail, update, status, changelog, and association endpoints.",
+		},
+		{
 			name:        "im-conversations",
 			service:     imService,
 			prefixPath:  "/api/v1/conversations",
@@ -415,6 +437,12 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 			service:     imService,
 			prefixPath:  "/api/v1/messages",
 			description: "Dedicated message endpoints.",
+		},
+		{
+			name:        "notification-list",
+			service:     notificationService,
+			prefixPath:  "/api/v1/notifications",
+			description: "Notification listing, read, and unread count endpoints.",
 		},
 	}, nil
 }

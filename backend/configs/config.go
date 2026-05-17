@@ -28,17 +28,21 @@ type ServerConfig struct {
 }
 
 type ServicesConfig struct {
-	GatewayPort   int
-	UserPort      int
-	IMPort        int
-	FilePort      int
-	SearchPort    int
-	WorkspacePort int
-	UserURL       string
-	IMURL         string
-	FileURL       string
-	SearchURL     string
-	WorkspaceURL  string
+	GatewayPort      int
+	UserPort         int
+	IMPort           int
+	FilePort         int
+	SearchPort       int
+	WorkspacePort    int
+	ProjectPort      int
+	NotificationPort int
+	UserURL          string
+	IMURL            string
+	FileURL          string
+	SearchURL        string
+	WorkspaceURL     string
+	ProjectURL       string
+	NotificationURL  string
 }
 
 func (s ServicesConfig) BaseURLFor(service string) (string, error) {
@@ -55,6 +59,10 @@ func (s ServicesConfig) BaseURLFor(service string) (string, error) {
 		return s.SearchURL, nil
 	case "workspace-service":
 		return s.WorkspaceURL, nil
+	case "project-service":
+		return s.ProjectURL, nil
+	case "notification-service":
+		return s.NotificationURL, nil
 	default:
 		return "", fmt.Errorf("service %q does not have a configured base URL", service)
 	}
@@ -74,6 +82,10 @@ func (s ServicesConfig) PortFor(service string) (int, error) {
 		return s.SearchPort, nil
 	case "workspace-service":
 		return s.WorkspacePort, nil
+	case "project-service":
+		return s.ProjectPort, nil
+	case "notification-service":
+		return s.NotificationPort, nil
 	default:
 		return 0, fmt.Errorf("service %q does not have a configured port", service)
 	}
@@ -109,6 +121,7 @@ type GatewayServiceTimeoutsConfig struct {
 	FileMS      int `mapstructure:"fileMs"`
 	SearchMS    int `mapstructure:"searchMs"`
 	WorkspaceMS int `mapstructure:"workspaceMs"`
+	ProjectMS   int `mapstructure:"projectMs"`
 }
 
 type RegistryConfig struct {
@@ -129,11 +142,13 @@ type DatabaseConfig struct {
 	Names        DatabaseNames `mapstructure:"names"`
 }
 
-type DatabaseNames struct {
-	User      string `mapstructure:"user"`
-	IM        string `mapstructure:"im"`
-	File      string `mapstructure:"file"`
-	Workspace string `mapstructure:"workspace"`
+	type DatabaseNames struct {
+	User         string `mapstructure:"user"`
+	IM           string `mapstructure:"im"`
+	File         string `mapstructure:"file"`
+	Workspace    string `mapstructure:"workspace"`
+	Project      string `mapstructure:"project"`
+	Notification string `mapstructure:"notification"`
 }
 
 func (d DatabaseConfig) DSN(dbName string) string {
@@ -153,6 +168,10 @@ func (d DatabaseConfig) ServiceDBName(service string) (string, error) {
 		return d.Names.File, nil
 	case "workspace-service":
 		return d.Names.Workspace, nil
+	case "project-service":
+		return d.Names.Project, nil
+	case "notification-service":
+		return d.Names.Notification, nil
 	default:
 		return "", fmt.Errorf("service %q does not own a database", service)
 	}
@@ -221,11 +240,15 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("services.filePort", 8083)
 	viper.SetDefault("services.searchPort", 8084)
 	viper.SetDefault("services.workspacePort", 8085)
+	viper.SetDefault("services.notificationPort", 8090)
+	viper.SetDefault("services.projectPort", 8086)
 	viper.SetDefault("services.userURL", "http://localhost:8081")
 	viper.SetDefault("services.imURL", "http://localhost:8082")
 	viper.SetDefault("services.fileURL", "http://localhost:8083")
 	viper.SetDefault("services.searchURL", "http://localhost:8084")
 	viper.SetDefault("services.workspaceURL", "http://localhost:8085")
+	viper.SetDefault("services.notificationURL", "http://localhost:8090")
+	viper.SetDefault("services.projectURL", "http://localhost:8086")
 	viper.SetDefault("gateway.healthTimeoutMs", 3000)
 	viper.SetDefault("gateway.rateLimit.requests", 180)
 	viper.SetDefault("gateway.rateLimit.windowMs", 60000)
@@ -239,6 +262,7 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("gateway.timeouts.fileMs", 20000)
 	viper.SetDefault("gateway.timeouts.searchMs", 5000)
 	viper.SetDefault("gateway.timeouts.workspaceMs", 8000)
+	viper.SetDefault("gateway.timeouts.projectMs", 8000)
 	viper.SetDefault("registry.enabled", true)
 	viper.SetDefault("registry.namespace", "workpal:registry")
 	viper.SetDefault("registry.ttlMs", 15000)
@@ -250,6 +274,8 @@ func Load(configPath string) (*Config, error) {
 	viper.SetDefault("database.names.im", "workpal_im")
 	viper.SetDefault("database.names.file", "workpal_file")
 	viper.SetDefault("database.names.workspace", "workpal_workspace")
+	viper.SetDefault("database.names.notification", "workpal_notification")
+	viper.SetDefault("database.names.project", "workpal_project")
 	viper.SetDefault("redis.streamsKey", "workpal:streams:messages")
 	viper.SetDefault("file.storeType", "local")
 	viper.SetDefault("file.localBaseDir", "./uploads")

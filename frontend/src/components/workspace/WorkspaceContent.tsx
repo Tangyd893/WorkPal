@@ -11,6 +11,7 @@ const TasksPanel = lazy(() => import('./TasksPanel'))
 const SchedulePanel = lazy(() => import('./SchedulePanel'))
 const FilesPanel = lazy(() => import('./FilesPanel'))
 const DirectoryPanel = lazy(() => import('./DirectoryPanel'))
+const ProjectsPanel = lazy(() => import('./ProjectsPanel'))
 
 interface WorkspaceContentProps {
   activeSection: WorkspaceSection
@@ -128,6 +129,45 @@ export default function WorkspaceContent({
           loading={workspace.directoryLoading}
           onQueryChange={workspace.setDirectoryQuery}
           onDepartmentChange={workspace.setDirectoryDepartmentID}
+        />
+      )
+    case 'projects':
+      return (
+        <ProjectsPanel
+          projects={workspace.projects}
+          issues={workspace.projectIssues}
+          issueTypes={workspace.projectIssueTypes}
+          selectedProjectId={workspace.selectedProjectId}
+          issuesLoading={workspace.projectIssuesLoading}
+          text={text}
+          getDisplayName={workspace.getDisplayName}
+          onSelectProject={(projectId) => {
+            workspace.setSelectedProjectId(projectId)
+            workspace.loadProjectIssues(projectId)
+          }}
+          onAddProject={actions.handleAddProject}
+          onDeleteProject={(projectID) =>
+            onConfirm({
+              title: text.projects.deleteProject,
+              message: text.projects.confirmDeleteProject,
+              confirmText: text.common.delete,
+              cancelText: text.common.cancel,
+              variant: 'danger',
+              onConfirm: () => actions.handleDeleteProject(projectID),
+            })
+          }
+          onAddIssue={actions.handleAddIssue}
+          onUpdateIssueStatus={actions.handleUpdateIssueStatus}
+          onDeleteIssue={(issueID) =>
+            onConfirm({
+              title: text.projects.deleteIssue,
+              message: text.projects.confirmDeleteIssue,
+              confirmText: text.common.delete,
+              cancelText: text.common.cancel,
+              variant: 'danger',
+              onConfirm: () => actions.handleDeleteIssue(issueID),
+            })
+          }
         />
       )
   }

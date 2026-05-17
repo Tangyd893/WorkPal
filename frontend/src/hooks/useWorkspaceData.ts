@@ -3,6 +3,9 @@ import { workpalApi } from '../api/workpal'
 import type {
   ConversationFile,
   Department,
+  Issue,
+  IssueType,
+  Project,
   ScheduleEvent,
   SharedDocument,
   WorkspaceSection,
@@ -10,7 +13,7 @@ import type {
   WorkspaceUser,
 } from '../types/workspace'
 
-type ResourceKey = 'tasks' | 'schedule' | 'files'
+type ResourceKey = 'tasks' | 'schedule' | 'files' | 'projects'
 
 const resourcesBySection: Record<WorkspaceSection, ResourceKey[]> = {
   overview: ['tasks', 'schedule', 'files'],
@@ -19,6 +22,7 @@ const resourcesBySection: Record<WorkspaceSection, ResourceKey[]> = {
   schedule: ['schedule'],
   files: ['files'],
   directory: [],
+  projects: ['projects'],
 }
 
 function sortUsers(users: WorkspaceUser[]): WorkspaceUser[] {
@@ -61,6 +65,11 @@ export function useWorkspaceData(activeSection: WorkspaceSection, username: stri
   const [tasks, setTasks] = useState<WorkspaceTask[]>([])
   const [schedule, setSchedule] = useState<ScheduleEvent[]>([])
   const [uploadedFiles, setUploadedFiles] = useState<ConversationFile[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [projectIssues, setProjectIssues] = useState<Issue[]>([])
+  const [projectIssueTypes, setProjectIssueTypes] = useState<IssueType[]>([])
+  const [projectIssuesLoading, setProjectIssuesLoading] = useState(false)
   const [uploadShareCounts, setUploadShareCounts] = useState<Record<number, number>>({})
   const [filesUploading, setFilesUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -68,11 +77,13 @@ export function useWorkspaceData(activeSection: WorkspaceSection, username: stri
     tasks: false,
     schedule: false,
     files: false,
+    projects: false,
   })
   const [pendingResources, setPendingResources] = useState<Record<ResourceKey, boolean>>({
     tasks: false,
     schedule: false,
     files: false,
+    projects: false,
   })
 
   const directoryRequestRef = useRef(0)
@@ -172,6 +183,19 @@ export function useWorkspaceData(activeSection: WorkspaceSection, username: stri
     }
   }, [loadedResources.files, markResourceLoaded, markResourcePending, pendingResources.files])
 
+  const loadProjects = useCallback(async () => {
+    if (loadedResources.projects || pendingResources.projects) return
+    markResourcePending('projects', true)
+    try {
+      setProjects(await workpalApi.listProjects())
+      markResourceLoaded('projects')
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load projects.')
+    } finally {
+      markResourcePending('projects', false)
+    }
+  }, [loadedResources.projects, markResourceLoaded, markResourcePending, pendingResources.projects])
+
   useEffect(() => {
     if (baseLoading) {
       return
@@ -187,7 +211,10 @@ export function useWorkspaceData(activeSection: WorkspaceSection, username: stri
     if (requiredResources.includes('files')) {
       void loadFiles()
     }
-  }, [activeSection, baseLoading, loadFiles, loadSchedule, loadTasks])
+    if (requiredResources.includes('projects')) {
+      void loadProjects()
+    }
+  }, [activeSection, baseLoading, loadFiles, loadProjects, loadSchedule, loadTasks])
 
   useEffect(() => {
     if (baseLoading || activeSection !== 'directory') {
@@ -220,6 +247,22 @@ export function useWorkspaceData(activeSection: WorkspaceSection, username: stri
       window.clearTimeout(timer)
     }
   }, [activeSection, baseLoading, directoryDepartmentID, directoryQuery])
+
+  const loadProjectIssues = useCallback(async (projectId: string) => {
+    setProjectIssuesLoading(true)
+    try {
+      const [issues, types] = await Promise.all([
+        workpalApi.listIssues(projectId),
+        workpalApi.listIssueTypes(projectId),
+      ])
+      setProjectIssues(issues)
+      setProjectIssueTypes(types)
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Unable to load issues.')
+    } finally {
+      setProjectIssuesLoading(false)
+    }
+  }, [])
 
   const documents = useMemo(() => {
     const ownerUsername = currentUser?.username || username || 'admin'
@@ -256,11 +299,19 @@ export function useWorkspaceData(activeSection: WorkspaceSection, username: stri
     getDisplayName: (accountUsername: string) => displayNameByUsername.get(accountUsername) ?? accountUsername,
     loading,
     loadError,
+    projects,
+    projectIssueTypes,
+    projectIssues,
+    projectIssuesLoading,
+    selectedProjectId,
     schedule,
     setDirectoryDepartmentID,
     setDirectoryQuery,
     setFilesUploading,
+    setProjectIssues,
+    setProjects,
     setSchedule,
+    setSelectedProjectId,
     setTasks,
     setUploadProgress,
     setUploadShareCounts,
@@ -270,5 +321,6 @@ export function useWorkspaceData(activeSection: WorkspaceSection, username: stri
     uploadProgress,
     uploadShareCounts,
     uploadedFiles,
+    loadProjectIssues,
   }
 }

@@ -2,8 +2,12 @@ import type { Dispatch, SetStateAction } from 'react'
 import { workpalApi } from '../api/workpal'
 import type {
   ConversationFile,
+  CreateIssueInput,
+  CreateProjectInput,
   CreateScheduleInput,
   CreateTaskInput,
+  Issue,
+  Project,
   ScheduleEvent,
   SharedDocument,
   TaskStatus,
@@ -15,8 +19,13 @@ import type { ToastType } from './useToastStore'
 interface WorkspaceActionsInput {
   tasks: WorkspaceTask[]
   schedule: ScheduleEvent[]
+  projects: Project[]
+  projectIssues: Issue[]
+  selectedProjectId: string | null
   setTasks: Dispatch<SetStateAction<WorkspaceTask[]>>
   setSchedule: Dispatch<SetStateAction<ScheduleEvent[]>>
+  setProjects: Dispatch<SetStateAction<Project[]>>
+  setProjectIssues: Dispatch<SetStateAction<Issue[]>>
   setUploadedFiles: Dispatch<SetStateAction<ConversationFile[]>>
   setUploadShareCounts: Dispatch<SetStateAction<Record<number, number>>>
   setFilesUploading: Dispatch<SetStateAction<boolean>>
@@ -38,8 +47,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
 export function useWorkspaceActions({
   tasks,
   schedule,
+  projects: _projects,
+  projectIssues: _projectIssues,
+  selectedProjectId: _selectedProjectId,
   setTasks,
   setSchedule,
+  setProjects,
+  setProjectIssues,
   setUploadedFiles,
   setUploadShareCounts,
   setFilesUploading,
@@ -175,6 +189,56 @@ export function useWorkspaceActions({
     }
   }
 
+  const handleAddProject = async (draft: CreateProjectInput) => {
+    try {
+      const project = await workpalApi.createProject(draft)
+      setProjects((current) => [project, ...current])
+      notify('success', project.name)
+    } catch (error) {
+      notify('error', getErrorMessage(error, 'Unable to create project.'))
+    }
+  }
+
+  const handleDeleteProject = async (projectID: string) => {
+    try {
+      await workpalApi.deleteProject(projectID)
+      setProjects((current) => current.filter((p) => p.id !== projectID))
+      notify('success', projectID)
+    } catch (error) {
+      notify('error', getErrorMessage(error, 'Unable to delete project.'))
+    }
+  }
+
+  const handleAddIssue = async (projectID: string, draft: CreateIssueInput) => {
+    try {
+      const issue = await workpalApi.createIssue(projectID, draft)
+      setProjectIssues((current) => [issue, ...current])
+      notify('success', issue.key)
+    } catch (error) {
+      notify('error', getErrorMessage(error, 'Unable to create issue.'))
+    }
+  }
+
+  const handleUpdateIssueStatus = async (issueID: string, status: string) => {
+    try {
+      const updated = await workpalApi.updateIssueStatus(issueID, status)
+      setProjectIssues((current) => current.map((iss) => iss.id === updated.id ? updated : iss))
+      notify('success', updated.key)
+    } catch (error) {
+      notify('error', getErrorMessage(error, 'Unable to update issue.'))
+    }
+  }
+
+  const handleDeleteIssue = async (issueID: string) => {
+    try {
+      await workpalApi.deleteIssue(issueID)
+      setProjectIssues((current) => current.filter((iss) => iss.id !== issueID))
+      notify('success', issueID)
+    } catch (error) {
+      notify('error', getErrorMessage(error, 'Unable to delete issue.'))
+    }
+  }
+
   const handleDeleteDocument = async (document: SharedDocument) => {
     if (!document.fileId) {
       return
@@ -214,16 +278,21 @@ export function useWorkspaceActions({
 
   return {
     handleAddEvent,
+    handleAddIssue,
+    handleAddProject,
     handleAddTask,
     handleAdvanceTask,
     handleDeleteDocument,
     handleDeleteEvent,
+    handleDeleteIssue,
+    handleDeleteProject,
     handleDeleteTask,
     handleUploadDocument,
     handleResetTask,
     handleShareDocument,
     handleShareEvent,
     handleShareTask,
+    handleUpdateIssueStatus,
     handleUpdateTaskStatus,
   }
 }

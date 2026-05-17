@@ -17,7 +17,7 @@ import { useI18n } from '../i18n'
 import type { WorkspaceSection } from '../types/workspace'
 import type { ConfirmRequest } from '../types/workspaceUi'
 
-const sectionOrder: WorkspaceSection[] = ['overview', 'chat', 'tasks', 'schedule', 'files', 'directory']
+const sectionOrder: WorkspaceSection[] = ['overview', 'chat', 'tasks', 'schedule', 'files', 'directory', 'projects']
 
 function isWorkspaceSection(value: string | undefined): value is WorkspaceSection {
   return sectionOrder.includes(value as WorkspaceSection)
@@ -49,8 +49,13 @@ export default function WorkspacePage() {
   const actions = useWorkspaceActions({
     tasks: workspace.tasks,
     schedule: workspace.schedule,
+    projects: workspace.projects,
+    projectIssues: workspace.projectIssues,
+    selectedProjectId: workspace.selectedProjectId,
     setTasks: workspace.setTasks,
     setSchedule: workspace.setSchedule,
+    setProjects: workspace.setProjects,
+    setProjectIssues: workspace.setProjectIssues,
     setUploadedFiles: workspace.setUploadedFiles,
     setUploadShareCounts: workspace.setUploadShareCounts,
     setFilesUploading: workspace.setFilesUploading,

@@ -9,9 +9,15 @@ import type {
 } from '../types/chat'
 import type {
   ConversationFile,
+  CreateIssueInput,
+  CreateProjectInput,
   CreateScheduleInput,
   CreateTaskInput,
   Department,
+  Issue,
+  IssueChangelog,
+  IssueType,
+  Project,
   ScheduleEvent,
   TaskStatus,
   WorkspaceTask,
@@ -254,5 +260,43 @@ export const workpalApi = {
 
   removeConversationMember(convID: number, userId: number) {
     return apiDelete<Conversation>(`/conversations/${convID}/members/${userId}`)
+  },
+
+  // --- 项目空间 API ---
+  listProjects() {
+    return apiGet<Project[]>('/projects')
+  },
+  createProject(payload: CreateProjectInput) {
+    return apiPost<Project, CreateProjectInput>('/projects', payload)
+  },
+  getProject(projectID: string) {
+    return apiGet<Project>(`/projects/${projectID}`)
+  },
+  deleteProject(projectID: string) {
+    return apiDelete<null>(`/projects/${projectID}`)
+  },
+  listIssues(projectID: string) {
+    return apiGet<Issue[]>(`/projects/${projectID}/issues`)
+  },
+  createIssue(projectID: string, payload: CreateIssueInput) {
+    return apiPost<Issue, CreateIssueInput>(`/projects/${projectID}/issues`, payload)
+  },
+  getIssue(issueID: string) {
+    return apiGet<Issue>(`/issues/${issueID}`)
+  },
+  updateIssue(issueID: string, payload: Partial<CreateIssueInput>) {
+    return apiPut<Issue, Partial<CreateIssueInput>>(`/issues/${issueID}`, payload)
+  },
+  updateIssueStatus(issueID: string, status: string) {
+    return apiPut<Issue, { status: string }>(`/issues/${issueID}/status`, { status })
+  },
+  deleteIssue(issueID: string) {
+    return apiDelete<null>(`/issues/${issueID}`)
+  },
+  listChangelogs(issueID: string) {
+    return apiGet<IssueChangelog[]>(`/issues/${issueID}/changelogs`)
+  },
+  listIssueTypes(projectID: string) {
+    return apiGet<IssueType[]>(`/projects/${projectID}/issue-types`)
   },
 }

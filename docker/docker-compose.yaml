@@ -77,6 +77,9 @@ services:
       SERVICES_FILEURL: http://file-service:8083
       SERVICES_SEARCHURL: http://search-service:8084
       SERVICES_WORKSPACEURL: http://workspace-service:8085
+      SERVICES_PROJECTURL: http://project-service:8086
+      DATABASE_NAMES_PROJECT: workpal_project
+      DATABASE_NAMES_NOTIFICATION: workpal_notification
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,6 +165,81 @@ services:
       - "8085:8085"
     restart: unless-stopped
 
+  project-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: project-service
+    container_name: workpal-project-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8086:8086"
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: notification-service
+    container_name: workpal-notification-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+
+  kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.8
+    container_name: workpal-kafka
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=256M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://kafka:9092,external://localhost:19092
+    ports:
+      - "19092:19092"
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: workpal-elasticsearch
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\|yellow'"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    restart: unless-stopped
+
   gateway:
     build:
       context: ../backend
@@ -182,6 +260,10 @@ services:
       search-service:
         condition: service_started
       workspace-service:
+        condition: service_started
+      project-service:
+        condition: service_started
+      notification-service:
         condition: service_started
     ports:
       - "8080:8080"
@@ -248,3 +330,5 @@ volumes:
   search_data:
   prometheus_data:
   grafana_data:
+  elasticsearch_data:
+  kafka_data:
