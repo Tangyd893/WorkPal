@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/project/engine"
 	"github.com/Tangyd893/WorkPal/backend/internal/project/model"
 )
 
@@ -31,14 +32,31 @@ type Repository interface {
 	CreateAssociation(ctx context.Context, assoc *model.Association) error
 	ListAssociations(ctx context.Context, sourceType string, sourceID int64) ([]*model.Association, error)
 	ListIssueTypes(ctx context.Context, projectID int64) ([]*model.IssueType, error)
+	ListWorkflows(ctx context.Context, projectID int64) ([]*model.Workflow, error)
+	GetWorkflow(ctx context.Context, workflowID int64) (*model.Workflow, error)
+	CreateWorkflow(ctx context.Context, workflow *model.Workflow) error
+	UpdateWorkflow(ctx context.Context, workflow *model.Workflow) error
+	DeleteWorkflow(ctx context.Context, workflowID int64) error
+	GetActiveWorkflow(ctx context.Context, projectID int64) (*model.Workflow, error)
+	ListCustomFieldDefs(ctx context.Context, projectID int64) ([]*model.CustomFieldDef, error)
+	CreateCustomFieldDef(ctx context.Context, def *model.CustomFieldDef) error
+	UpdateCustomFieldDef(ctx context.Context, def *model.CustomFieldDef) error
+	DeleteCustomFieldDef(ctx context.Context, fieldID int64) error
+	ListCustomFieldValues(ctx context.Context, issueID int64) ([]*model.CustomFieldValue, error)
+	UpsertCustomFieldValue(ctx context.Context, val *model.CustomFieldValue) error
+	DeleteCustomFieldValues(ctx context.Context, issueID int64) error
 }
 
 type Service struct {
-	repo Repository
+	repo   Repository
+	engine *engine.Engine
 }
 
 func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo:   repo,
+		engine: engine.NewEngine(),
+	}
 }
 
 type ProjectDTO struct {
@@ -125,6 +143,28 @@ type IssueTypeDTO struct {
 	IsStandard     bool   `json:"is_standard"`
 }
 
+type WorkflowDTO struct {
+	ID            string             `json:"id"`
+	ProjectID     int64              `json:"project_id"`
+	Name          string             `json:"name"`
+	Description   string             `json:"description"`
+	IsActive      bool               `json:"is_active"`
+	DSLDefinition *model.WorkflowDSL `json:"dsl_definition"`
+	CreatedAt     string             `json:"created_at"`
+}
+
+type WorkflowInput struct {
+	Name          string             `json:"name"`
+	Description   string             `json:"description"`
+	IsActive      *bool              `json:"is_active"`
+	DSLDefinition *model.WorkflowDSL `json:"dsl_definition"`
+}
+
+type AvailableStatusesResult struct {
+	CurrentStatus string   `json:"current_status"`
+	Statuses      []string `json:"statuses"`
+}
+
 func (s *Service) ListProjects(ctx context.Context) ([]ProjectDTO, error) {
 	projects, err := s.repo.ListProjects(ctx)
 	if err != nil {
@@ -150,6 +190,7 @@ func (s *Service) CreateProject(ctx context.Context, input ProjectInput) (Projec
 		return ProjectDTO{}, err
 	}
 	s.seedDefaultIssueTypes(ctx, project.ID)
+	s.seedDefaultWorkflow(ctx, project.ID)
 	return projectDTO(project), nil
 }
 
@@ -234,16 +275,32 @@ func (s *Service) GetIssue(ctx context.Context, issueID int64) (IssueDTO, error)
 	return dto, nil
 }
 
-func (s *Service) UpdateIssueStatus(ctx context.Context, issueID int64, userID int64, status string) (IssueDTO, error) {
+func (s *Service) UpdateIssueStatus(ctx context.Context, issueID int64, userID int64, targetStatus string) (IssueDTO, error) {
 	issue, err := s.repo.GetIssue(ctx, issueID)
 	if err != nil {
 		return IssueDTO{}, ErrNotFound
 	}
 	oldStatus := issue.Status
-	issue.Status = fallback(status, issue.Status)
-	if oldStatus != issue.Status {
-		s.recordChangelog(ctx, issueID, "状态", oldStatus, issue.Status, userID)
+	if oldStatus == targetStatus {
+		issueTypes, _ := s.repo.ListIssueTypes(ctx, issue.ProjectID)
+		return issueDTO(issue, issueTypes), nil
 	}
+
+	workflow, err := s.repo.GetActiveWorkflow(ctx, issue.ProjectID)
+	if err == nil && workflow != nil {
+		dsl, parseErr := workflow.ParseDSL()
+		if parseErr != nil {
+			return IssueDTO{}, fmt.Errorf("解析工作流定义失败: %w", parseErr)
+		}
+		transition, validateErr := s.engine.ValidateTransition(dsl, issue, userID, targetStatus)
+		if validateErr != nil {
+			return IssueDTO{}, validateErr
+		}
+		s.executePostFunctions(ctx, transition, issue, userID, oldStatus, targetStatus)
+	}
+
+	issue.Status = targetStatus
+	s.recordChangelog(ctx, issueID, "状态", oldStatus, targetStatus, userID)
 	if err := s.repo.SaveIssue(ctx, issue); err != nil {
 		return IssueDTO{}, err
 	}
@@ -376,6 +433,162 @@ func (s *Service) ListIssueTypes(ctx context.Context, projectID int64) ([]IssueT
 	return out, nil
 }
 
+func (s *Service) ListWorkflows(ctx context.Context, projectID int64) ([]WorkflowDTO, error) {
+	workflows, err := s.repo.ListWorkflows(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]WorkflowDTO, 0, len(workflows))
+	for _, w := range workflows {
+		dsl, _ := w.ParseDSL()
+		out = append(out, WorkflowDTO{
+			ID:            formatWFID(w.ID),
+			ProjectID:     w.ProjectID,
+			Name:          w.Name,
+			Description:   w.Description,
+			IsActive:      w.IsActive,
+			DSLDefinition: dsl,
+			CreatedAt:     w.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) CreateWorkflow(ctx context.Context, projectID int64, input WorkflowInput) (WorkflowDTO, error) {
+	dsl := input.DSLDefinition
+	if dsl == nil {
+		dsl = engine.DefaultWorkflowDSL()
+	}
+	isActive := true
+	if input.IsActive != nil {
+		isActive = *input.IsActive
+	}
+	workflow := &model.Workflow{
+		ProjectID:   projectID,
+		Name:        fallback(input.Name, "默认工作流"),
+		Description: input.Description,
+		IsActive:    isActive,
+	}
+	if err := workflow.SetDSL(dsl); err != nil {
+		return WorkflowDTO{}, fmt.Errorf("序列化工作流定义失败: %w", err)
+	}
+	if err := s.repo.CreateWorkflow(ctx, workflow); err != nil {
+		return WorkflowDTO{}, err
+	}
+	return WorkflowDTO{
+		ID:            formatWFID(workflow.ID),
+		ProjectID:     workflow.ProjectID,
+		Name:          workflow.Name,
+		Description:   workflow.Description,
+		IsActive:      workflow.IsActive,
+		DSLDefinition: dsl,
+		CreatedAt:     workflow.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) GetWorkflow(ctx context.Context, workflowID int64) (WorkflowDTO, error) {
+	workflow, err := s.repo.GetWorkflow(ctx, workflowID)
+	if err != nil {
+		return WorkflowDTO{}, ErrNotFound
+	}
+	dsl, _ := workflow.ParseDSL()
+	return WorkflowDTO{
+		ID:            formatWFID(workflow.ID),
+		ProjectID:     workflow.ProjectID,
+		Name:          workflow.Name,
+		Description:   workflow.Description,
+		IsActive:      workflow.IsActive,
+		DSLDefinition: dsl,
+		CreatedAt:     workflow.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) UpdateWorkflow(ctx context.Context, workflowID int64, input WorkflowInput) (WorkflowDTO, error) {
+	workflow, err := s.repo.GetWorkflow(ctx, workflowID)
+	if err != nil {
+		return WorkflowDTO{}, ErrNotFound
+	}
+	if input.Name != "" {
+		workflow.Name = input.Name
+	}
+	if input.Description != "" {
+		workflow.Description = input.Description
+	}
+	if input.IsActive != nil {
+		workflow.IsActive = *input.IsActive
+	}
+	if input.DSLDefinition != nil {
+		if err := workflow.SetDSL(input.DSLDefinition); err != nil {
+			return WorkflowDTO{}, fmt.Errorf("序列化工作流定义失败: %w", err)
+		}
+	}
+	if err := s.repo.UpdateWorkflow(ctx, workflow); err != nil {
+		return WorkflowDTO{}, err
+	}
+	dsl, _ := workflow.ParseDSL()
+	return WorkflowDTO{
+		ID:            formatWFID(workflow.ID),
+		ProjectID:     workflow.ProjectID,
+		Name:          workflow.Name,
+		Description:   workflow.Description,
+		IsActive:      workflow.IsActive,
+		DSLDefinition: dsl,
+		CreatedAt:     workflow.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+func (s *Service) DeleteWorkflow(ctx context.Context, workflowID int64) error {
+	return s.repo.DeleteWorkflow(ctx, workflowID)
+}
+
+func (s *Service) GetAvailableStatuses(ctx context.Context, issueID int64) (AvailableStatusesResult, error) {
+	issue, err := s.repo.GetIssue(ctx, issueID)
+	if err != nil {
+		return AvailableStatusesResult{}, ErrNotFound
+	}
+	result := AvailableStatusesResult{CurrentStatus: issue.Status}
+	workflow, err := s.repo.GetActiveWorkflow(ctx, issue.ProjectID)
+	if err != nil || workflow == nil {
+		result.Statuses = s.engine.GetAvailableStatuses(engine.DefaultWorkflowDSL(), issue.Status)
+		return result, nil
+	}
+	dsl, parseErr := workflow.ParseDSL()
+	if parseErr != nil {
+		result.Statuses = s.engine.GetAvailableStatuses(engine.DefaultWorkflowDSL(), issue.Status)
+		return result, nil
+	}
+	if len(dsl.Transitions) == 0 {
+		result.Statuses = s.engine.GetAvailableStatuses(engine.DefaultWorkflowDSL(), issue.Status)
+		return result, nil
+	}
+	result.Statuses = s.engine.GetAvailableStatuses(dsl, issue.Status)
+	return result, nil
+}
+
+func (s *Service) seedDefaultWorkflow(ctx context.Context, projectID int64) {
+	dsl := engine.DefaultWorkflowDSL()
+	workflow := &model.Workflow{
+		ProjectID: projectID,
+		Name:      "默认工作流",
+		IsActive:  true,
+	}
+	if err := workflow.SetDSL(dsl); err != nil {
+		return
+	}
+	_ = s.repo.CreateWorkflow(ctx, workflow)
+}
+
+func (s *Service) executePostFunctions(ctx context.Context, transition *model.Transition, issue *model.Issue, userID int64, oldStatus, newStatus string) {
+	for _, pf := range transition.PostFunctions {
+		switch pf.Class {
+		case "UpdateHistory":
+			s.recordChangelog(ctx, issue.ID, "状态", oldStatus, newStatus, userID)
+		case "SendNotification":
+			// 预留通知事件发送接口
+		}
+	}
+}
+
 func (s *Service) recordChangelog(ctx context.Context, issueID int64, field, oldValue, newValue string, changedBy int64) {
 	logEntry := &model.IssueChangelog{
 		IssueID:   issueID,
@@ -408,6 +621,177 @@ func (s *Service) seedDefaultIssueTypes(ctx context.Context, projectID int64) {
 		_ = s.repo.(interface{ CreateIssueType(ctx context.Context, t *model.IssueType) error }).(interface{ CreateIssueType(ctx context.Context, t *model.IssueType) error })
 		_ = et
 	}
+}
+
+type CustomFieldDefDTO struct {
+	ID        int64    `json:"id"`
+	ProjectID int64    `json:"project_id"`
+	Name      string   `json:"name"`
+	FieldType string   `json:"field_type"`
+	Options   []string `json:"options"`
+	IsRequired bool    `json:"is_required"`
+	SortOrder int      `json:"sort_order"`
+}
+
+type CustomFieldDefInput struct {
+	Name      string   `json:"name"`
+	FieldType string   `json:"field_type"`
+	Options   []string `json:"options"`
+	IsRequired bool    `json:"is_required"`
+	SortOrder int      `json:"sort_order"`
+}
+
+type CustomFieldValueDTO struct {
+	ID          int64   `json:"id"`
+	IssueID     int64   `json:"issue_id"`
+	FieldID     int64   `json:"field_id"`
+	FieldName   string  `json:"field_name"`
+	FieldType   string  `json:"field_type"`
+	ValueText   string  `json:"value_text"`
+	ValueNumber float64 `json:"value_number"`
+	ValueDate   *string `json:"value_date"`
+}
+
+type CustomFieldValueInput struct {
+	FieldID     int64   `json:"field_id"`
+	ValueText   string  `json:"value_text"`
+	ValueNumber float64 `json:"value_number"`
+	ValueDate   *string `json:"value_date"`
+}
+
+func (s *Service) ListCustomFieldDefs(ctx context.Context, projectID int64) ([]CustomFieldDefDTO, error) {
+	defs, err := s.repo.ListCustomFieldDefs(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CustomFieldDefDTO, 0, len(defs))
+	for _, d := range defs {
+		opts, _ := d.ParseOptions()
+		out = append(out, CustomFieldDefDTO{
+			ID:         d.ID,
+			ProjectID:  d.ProjectID,
+			Name:       d.Name,
+			FieldType:  d.FieldType,
+			Options:    opts,
+			IsRequired: d.IsRequired,
+			SortOrder:  d.SortOrder,
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) CreateCustomFieldDef(ctx context.Context, projectID int64, input CustomFieldDefInput) (CustomFieldDefDTO, error) {
+	def := &model.CustomFieldDef{
+		ProjectID:  projectID,
+		Name:       input.Name,
+		FieldType:  fallback(input.FieldType, "text"),
+		IsRequired: input.IsRequired,
+		SortOrder:  input.SortOrder,
+	}
+	if len(input.Options) > 0 {
+		_ = def.SetOptions(input.Options)
+	}
+	if err := s.repo.CreateCustomFieldDef(ctx, def); err != nil {
+		return CustomFieldDefDTO{}, err
+	}
+	opts, _ := def.ParseOptions()
+	return CustomFieldDefDTO{
+		ID:         def.ID,
+		ProjectID:  def.ProjectID,
+		Name:       def.Name,
+		FieldType:  def.FieldType,
+		Options:    opts,
+		IsRequired: def.IsRequired,
+		SortOrder:  def.SortOrder,
+	}, nil
+}
+
+func (s *Service) UpdateCustomFieldDef(ctx context.Context, fieldID int64, input CustomFieldDefInput) (CustomFieldDefDTO, error) {
+	defs, _ := s.repo.ListCustomFieldDefs(ctx, 0)
+	var def *model.CustomFieldDef
+	for _, d := range defs {
+		if d.ID == fieldID {
+			def = d
+			break
+		}
+	}
+	if def == nil {
+		return CustomFieldDefDTO{}, ErrNotFound
+	}
+	if input.Name != "" {
+		def.Name = input.Name
+	}
+	if input.FieldType != "" {
+		def.FieldType = input.FieldType
+	}
+	def.IsRequired = input.IsRequired
+	if input.SortOrder != 0 {
+		def.SortOrder = input.SortOrder
+	}
+	if len(input.Options) > 0 {
+		_ = def.SetOptions(input.Options)
+	}
+	if err := s.repo.UpdateCustomFieldDef(ctx, def); err != nil {
+		return CustomFieldDefDTO{}, err
+	}
+	opts, _ := def.ParseOptions()
+	return CustomFieldDefDTO{
+		ID:         def.ID,
+		ProjectID:  def.ProjectID,
+		Name:       def.Name,
+		FieldType:  def.FieldType,
+		Options:    opts,
+		IsRequired: def.IsRequired,
+		SortOrder:  def.SortOrder,
+	}, nil
+}
+
+func (s *Service) DeleteCustomFieldDef(ctx context.Context, fieldID int64) error {
+	return s.repo.DeleteCustomFieldDef(ctx, fieldID)
+}
+
+func (s *Service) GetIssueCustomFieldValues(ctx context.Context, issueID int64) ([]CustomFieldValueDTO, error) {
+	vals, err := s.repo.ListCustomFieldValues(ctx, issueID)
+	if err != nil {
+		return nil, err
+	}
+	issue, err := s.repo.GetIssue(ctx, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defs, _ := s.repo.ListCustomFieldDefs(ctx, issue.ProjectID)
+	defMap := make(map[int64]*model.CustomFieldDef)
+	for _, d := range defs {
+		defMap[d.ID] = d
+	}
+	out := make([]CustomFieldValueDTO, 0, len(vals))
+	for _, v := range vals {
+		dto := CustomFieldValueDTO{
+			ID:          v.ID,
+			IssueID:     v.IssueID,
+			FieldID:     v.FieldID,
+			ValueText:   v.ValueText,
+			ValueNumber: v.ValueNumber,
+			ValueDate:   v.ValueDate,
+		}
+		if def, ok := defMap[v.FieldID]; ok {
+			dto.FieldName = def.Name
+			dto.FieldType = def.FieldType
+		}
+		out = append(out, dto)
+	}
+	return out, nil
+}
+
+func (s *Service) UpsertCustomFieldValue(ctx context.Context, issueID int64, input CustomFieldValueInput) error {
+	val := &model.CustomFieldValue{
+		IssueID:     issueID,
+		FieldID:     input.FieldID,
+		ValueText:   input.ValueText,
+		ValueNumber: input.ValueNumber,
+		ValueDate:   input.ValueDate,
+	}
+	return s.repo.UpsertCustomFieldValue(ctx, val)
 }
 
 func projectDTO(p *model.Project) ProjectDTO {
@@ -459,6 +843,15 @@ func issueDTO(issue *model.Issue, issueTypes []*model.IssueType) IssueDTO {
 
 func formatID(id int64) string {
 	return "prj-" + strconv.FormatInt(id, 10)
+}
+
+func formatWFID(id int64) string {
+	return "wf-" + strconv.FormatInt(id, 10)
+}
+
+func ParseWFID(id string) (int64, error) {
+	id = strings.TrimPrefix(id, "wf-")
+	return strconv.ParseInt(id, 10, 64)
 }
 
 func ParseID(id string) (int64, error) {

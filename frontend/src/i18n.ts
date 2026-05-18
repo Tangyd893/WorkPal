@@ -286,6 +286,101 @@ export interface AppTranslations {
     summaryLabel: string
     keyLabel: string
   }
+  workflows: {
+    title: string
+    subtitle: string
+    addWorkflow: string
+    editWorkflow: string
+    deleteWorkflow: string
+    activeWorkflow: string
+    workflowName: string
+    workflowDesc: string
+    statuses: string
+    transitions: string
+    fromStatus: string
+    toStatus: string
+    noWorkflows: string
+    defaultWorkflow: string
+    addTransition: string
+    removeTransition: string
+    confirmDeleteWorkflow: string
+    confirmDeleteMessage: string
+    saveWorkflow: string
+    addStatus: string
+    conditions: string
+    validators: string
+    postFunctions: string
+  }
+  rbac: {
+    title: string
+    subtitle: string
+    roles: string
+    permissions: string
+    projectRoles: string
+    projectMembers: string
+    addMember: string
+    removeMember: string
+    assignRole: string
+    roleName: string
+    admin: string
+    developer: string
+    viewer: string
+    reporter: string
+  }
+  customFields: {
+    title: string
+    subtitle: string
+    addField: string
+    editField: string
+    deleteField: string
+    fieldName: string
+    fieldType: string
+    required: string
+    options: string
+    text: string
+    number: string
+    date: string
+    select: string
+    multiSelect: string
+    value: string
+    noFields: string
+  }
+  docs: {
+    title: string
+    subtitle: string
+    addDoc: string
+    addFolder: string
+    editDoc: string
+    deleteDoc: string
+    revisions: string
+    noDocs: string
+    content: string
+  }
+  calendar: {
+    title: string
+    subtitle: string
+    addEvent: string
+    editEvent: string
+    deleteEvent: string
+    noEvents: string
+    startsAt: string
+    endsAt: string
+    allDay: string
+    location: string
+    attendees: string
+  }
+  approvals: {
+    title: string
+    subtitle: string
+    templates: string
+    instances: string
+    submit: string
+    approve: string
+    reject: string
+    pending: string
+    noTemplates: string
+    noInstances: string
+  }
   status: {
     online: string
     away: string

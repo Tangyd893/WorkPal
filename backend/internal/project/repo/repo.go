@@ -124,3 +124,87 @@ func (r *Repo) ListIssueTypes(ctx context.Context, projectID int64) ([]*model.Is
 		Find(&types).Error
 	return types, err
 }
+
+func (r *Repo) ListWorkflows(ctx context.Context, projectID int64) ([]*model.Workflow, error) {
+	var workflows []*model.Workflow
+	err := r.db.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Order("created_at DESC").
+		Find(&workflows).Error
+	return workflows, err
+}
+
+func (r *Repo) GetWorkflow(ctx context.Context, workflowID int64) (*model.Workflow, error) {
+	var workflow model.Workflow
+	err := r.db.WithContext(ctx).
+		Where("id = ?", workflowID).
+		First(&workflow).Error
+	return &workflow, err
+}
+
+func (r *Repo) CreateWorkflow(ctx context.Context, workflow *model.Workflow) error {
+	return r.db.WithContext(ctx).Create(workflow).Error
+}
+
+func (r *Repo) UpdateWorkflow(ctx context.Context, workflow *model.Workflow) error {
+	return r.db.WithContext(ctx).Save(workflow).Error
+}
+
+func (r *Repo) DeleteWorkflow(ctx context.Context, workflowID int64) error {
+	return r.db.WithContext(ctx).
+		Where("id = ?", workflowID).
+		Delete(&model.Workflow{}).Error
+}
+
+func (r *Repo) GetActiveWorkflow(ctx context.Context, projectID int64) (*model.Workflow, error) {
+	var workflow model.Workflow
+	err := r.db.WithContext(ctx).
+		Where("project_id = ? AND is_active = ?", projectID, true).
+		Order("created_at DESC").
+		First(&workflow).Error
+	return &workflow, err
+}
+
+func (r *Repo) ListCustomFieldDefs(ctx context.Context, projectID int64) ([]*model.CustomFieldDef, error) {
+	var defs []*model.CustomFieldDef
+	err := r.db.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Order("sort_order ASC").
+		Find(&defs).Error
+	return defs, err
+}
+
+func (r *Repo) CreateCustomFieldDef(ctx context.Context, def *model.CustomFieldDef) error {
+	return r.db.WithContext(ctx).Create(def).Error
+}
+
+func (r *Repo) UpdateCustomFieldDef(ctx context.Context, def *model.CustomFieldDef) error {
+	return r.db.WithContext(ctx).Save(def).Error
+}
+
+func (r *Repo) DeleteCustomFieldDef(ctx context.Context, fieldID int64) error {
+	return r.db.WithContext(ctx).
+		Where("id = ?", fieldID).
+		Delete(&model.CustomFieldDef{}).Error
+}
+
+func (r *Repo) ListCustomFieldValues(ctx context.Context, issueID int64) ([]*model.CustomFieldValue, error) {
+	var vals []*model.CustomFieldValue
+	err := r.db.WithContext(ctx).
+		Where("issue_id = ?", issueID).
+		Find(&vals).Error
+	return vals, err
+}
+
+func (r *Repo) UpsertCustomFieldValue(ctx context.Context, val *model.CustomFieldValue) error {
+	return r.db.WithContext(ctx).
+		Where("issue_id = ? AND field_id = ?", val.IssueID, val.FieldID).
+		Assign(val).
+		FirstOrCreate(val).Error
+}
+
+func (r *Repo) DeleteCustomFieldValues(ctx context.Context, issueID int64) error {
+	return r.db.WithContext(ctx).
+		Where("issue_id = ?", issueID).
+		Delete(&model.CustomFieldValue{}).Error
+}

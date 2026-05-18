@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/Tangyd893/WorkPal/backend/internal/analytics"
 	"github.com/Tangyd893/WorkPal/backend/internal/audit"
 	"github.com/Tangyd893/WorkPal/backend/internal/platform"
 	projectHandler "github.com/Tangyd893/WorkPal/backend/internal/project/handler"
@@ -32,6 +33,7 @@ func main() {
 		&projectModel.Version{},
 		&projectModel.IssueChangelog{},
 		&projectModel.Association{},
+		&projectModel.Workflow{},
 		&audit.Log{},
 	); err != nil {
 		log.Fatalf("migrate project service schema: %v", err)
@@ -39,7 +41,8 @@ func main() {
 
 	repo := projectRepo.NewRepo(db)
 	svc := projectService.NewService(repo)
-	handler := projectHandler.NewHandler(svc, audit.NewRecorder(db))
+	analyticsSvc := analytics.NewService(db, repo)
+	handler := projectHandler.NewHandler(svc, analyticsSvc, audit.NewRecorder(db))
 
 	var registry *platform.ServiceRegistry
 	var registryStop context.CancelFunc

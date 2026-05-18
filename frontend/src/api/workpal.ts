@@ -20,6 +20,28 @@ import type {
   Project,
   ScheduleEvent,
   TaskStatus,
+  Workflow,
+  CreateWorkflowInput,
+  AvailableStatuses,
+  Role,
+  Permission,
+  ProjectRole,
+  ProjectMember,
+  AssignRoleInput,
+  AddProjectMemberInput,
+  CustomFieldDef,
+  CreateCustomFieldInput,
+  CustomFieldValue,
+  UpsertCustomFieldValueInput,
+  Document,
+  CreateDocumentInput,
+  DocumentRevision,
+  CalendarEvent,
+  CreateCalendarInput,
+  ApprovalTemplate,
+  ApprovalInstance,
+  CreateApprovalInput,
+  ApprovalActionInput,
   WorkspaceTask,
   WorkspaceUser,
 } from '../types/workspace'
@@ -298,5 +320,119 @@ export const workpalApi = {
   },
   listIssueTypes(projectID: string) {
     return apiGet<IssueType[]>(`/projects/${projectID}/issue-types`)
+  },
+  listWorkflows(projectID: string) {
+    return apiGet<Workflow[]>(`/projects/${projectID}/workflows`)
+  },
+  createWorkflow(projectID: string, payload: CreateWorkflowInput) {
+    return apiPost<Workflow, CreateWorkflowInput>(`/projects/${projectID}/workflows`, payload)
+  },
+  getWorkflow(workflowID: string) {
+    return apiGet<Workflow>(`/workflows/${workflowID}`)
+  },
+  updateWorkflow(workflowID: string, payload: Partial<CreateWorkflowInput>) {
+    return apiPut<Workflow, Partial<CreateWorkflowInput>>(`/workflows/${workflowID}`, payload)
+  },
+  deleteWorkflow(workflowID: string) {
+    return apiDelete<null>(`/workflows/${workflowID}`)
+  },
+  getAvailableStatuses(issueID: string) {
+    return apiGet<AvailableStatuses>(`/issues/${issueID}/available-statuses`)
+  },
+  listRoles() {
+    return apiGet<Role[]>('/roles')
+  },
+  listPermissions() {
+    return apiGet<Permission[]>('/permissions')
+  },
+  assignRole(payload: AssignRoleInput) {
+    return apiPost<null, AssignRoleInput>('/user-roles', payload)
+  },
+  removeRole(payload: AssignRoleInput) {
+    return apiDelete<null>('/user-roles', { data: payload })
+  },
+  getUserPermissions(userID: number) {
+    return apiGet<string[]>(`/users/${userID}/permissions`)
+  },
+  listProjectRoles(projectID: string) {
+    return apiGet<ProjectRole[]>(`/projects/${projectID}/roles`)
+  },
+  createProjectRole(projectID: string, payload: { name: string; description: string }) {
+    return apiPost<ProjectRole, { name: string; description: string }>(`/projects/${projectID}/roles`, payload)
+  },
+  addProjectMember(projectID: string, payload: AddProjectMemberInput) {
+    return apiPost<null, AddProjectMemberInput>(`/projects/${projectID}/members`, payload)
+  },
+  removeProjectMember(projectID: string, userID: number) {
+    return apiDelete<null>(`/projects/${projectID}/members/${userID}`)
+  },
+  listProjectMembers(projectID: string) {
+    return apiGet<ProjectMember[]>(`/projects/${projectID}/members`)
+  },
+  listCustomFieldDefs(projectID: string) {
+    return apiGet<CustomFieldDef[]>(`/projects/${projectID}/custom-fields`)
+  },
+  createCustomFieldDef(projectID: string, payload: CreateCustomFieldInput) {
+    return apiPost<CustomFieldDef, CreateCustomFieldInput>(`/projects/${projectID}/custom-fields`, payload)
+  },
+  updateCustomFieldDef(fieldID: string, payload: Partial<CreateCustomFieldInput>) {
+    return apiPut<CustomFieldDef, Partial<CreateCustomFieldInput>>(`/custom-fields/${fieldID}`, payload)
+  },
+  deleteCustomFieldDef(fieldID: string) {
+    return apiDelete<null>(`/custom-fields/${fieldID}`)
+  },
+  getIssueCustomFieldValues(issueID: string) {
+    return apiGet<CustomFieldValue[]>(`/issues/${issueID}/custom-fields`)
+  },
+  upsertCustomFieldValue(issueID: string, payload: UpsertCustomFieldValueInput) {
+    return apiPut<null, UpsertCustomFieldValueInput>(`/issues/${issueID}/custom-fields`, payload)
+  },
+  listDocuments(params?: { project_id?: number; parent_id?: number }) {
+    return apiGet<Document[]>('/documents', { params })
+  },
+  getDocument(docID: number) {
+    return apiGet<Document>(`/documents/${docID}`)
+  },
+  createDocument(payload: CreateDocumentInput) {
+    return apiPost<Document, CreateDocumentInput>('/documents', payload)
+  },
+  updateDocument(docID: number, payload: Partial<CreateDocumentInput>) {
+    return apiPut<Document, Partial<CreateDocumentInput>>(`/documents/${docID}`, payload)
+  },
+  deleteDocument(docID: number) {
+    return apiDelete<null>(`/documents/${docID}`)
+  },
+  listDocumentRevisions(docID: number) {
+    return apiGet<DocumentRevision[]>(`/documents/${docID}/revisions`)
+  },
+  listCalendarEvents(params?: { from?: string; to?: string; organizer_id?: number }) {
+    return apiGet<CalendarEvent[]>('/calendar', { params })
+  },
+  createCalendarEvent(payload: CreateCalendarInput) {
+    return apiPost<CalendarEvent, CreateCalendarInput>('/calendar', payload)
+  },
+  updateCalendarEvent(eventID: number, payload: Partial<CreateCalendarInput>) {
+    return apiPut<CalendarEvent, Partial<CreateCalendarInput>>(`/calendar/${eventID}`, payload)
+  },
+  deleteCalendarEvent(eventID: number) {
+    return apiDelete<null>(`/calendar/${eventID}`)
+  },
+  listApprovalTemplates(projectID?: number) {
+    return apiGet<ApprovalTemplate[]>('/approvals/templates', { params: { project_id: projectID } })
+  },
+  createApprovalTemplate(payload: { name: string; description?: string; form_schema?: string; flow_definition?: string; project_id?: number }) {
+    return apiPost<ApprovalTemplate, typeof payload>('/approvals/templates', payload)
+  },
+  listApprovalInstances(params?: { submitter_id?: number; status?: string }) {
+    return apiGet<ApprovalInstance[]>('/approvals/instances', { params })
+  },
+  getApprovalInstance(id: number) {
+    return apiGet<ApprovalInstance>(`/approvals/instances/${id}`)
+  },
+  createApprovalInstance(payload: CreateApprovalInput) {
+    return apiPost<ApprovalInstance, CreateApprovalInput>('/approvals/instances', payload)
+  },
+  processApprovalAction(id: number, payload: ApprovalActionInput) {
+    return apiPost<ApprovalInstance, ApprovalActionInput>(`/approvals/instances/${id}/action`, payload)
   },
 }

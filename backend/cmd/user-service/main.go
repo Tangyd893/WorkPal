@@ -23,21 +23,32 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	if err := db.AutoMigrate(&model.User{}, &model.Department{}, &model.Employee{}); err != nil {
+	if err := db.AutoMigrate(
+		&model.User{}, &model.Department{}, &model.Employee{},
+		&model.Role{}, &model.Permission{}, &model.RolePermission{},
+		&model.UserRole{}, &model.ProjectRole{}, &model.ProjectRolePermission{},
+		&model.ProjectMember{},
+	); err != nil {
 		log.Fatalf("migrate user service schema: %v", err)
 	}
 
 	userRepoInst := userRepo.NewUserRepo(db)
+	rbacRepoInst := userRepo.NewRBACRepo(db)
 	if cfg.Server.Mode != "release" {
 		if err := platform.EnsureDevelopmentUsers(context.Background(), db, userRepoInst); err != nil {
 			log.Fatalf("seed development users: %v", err)
+		}
+		if err := platform.EnsureRBACSeed(context.Background(), db); err != nil {
+			log.Printf("seed rbac data: %v", err)
 		}
 		log.Printf("development users ensured (%d accounts)", platform.DevelopmentUserCount())
 	}
 
 	authSvc := userService.NewAuthService(userRepoInst, cfg.Server.JWTExpiryHours)
 	userSvc := userService.NewUserService(userRepoInst)
+	rbacSvc := userService.NewRBACService(rbacRepoInst)
 	userHdlr := userHandler.NewUserHandler(userSvc, authSvc)
+	rbacHdlr := userHandler.NewRBACHandler(rbacSvc)
 
 	var registry *platform.ServiceRegistry
 	var registryStop context.CancelFunc
@@ -61,6 +72,7 @@ func main() {
 	platform.RegisterHealth(r, "user-service", platform.SQLHealthCheck("postgres", sqlDB))
 	apiV1 := r.Group("/api/v1")
 	userHdlr.RegisterRoutes(apiV1)
+	rbacHdlr.RegisterRoutes(apiV1)
 
 	if err := platform.RunHTTP("user-service", cfg.Services.UserPort, r, func() {
 		if registry != nil {

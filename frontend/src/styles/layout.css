@@ -323,3 +323,58 @@
   gap: 16px;
   align-items: flex-start;
 }
+
+/* ---- 移动端响应式适配 ---- */
+@media (max-width: 768px) {
+  .login-grid {
+    grid-template-columns: 1fr;
+  }
+  .login-card,
+  .helper-card {
+    padding: var(--space-4);
+  }
+  .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar-panel {
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar-panel.open {
+    transform: translateX(0);
+  }
+  .kanban-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .kanban-column {
+    min-width: 260px;
+  }
+  .page-toolbar {
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .projects-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-topbar {
+    justify-content: center;
+  }
+  .panel-heading {
+    flex-direction: column;
+  }
+  .kanban-column {
+    min-width: 220px;
+  }
+  .module-surface {
+    padding: var(--space-3);
+  }
+}

@@ -273,7 +273,11 @@ func buildUpstreamServices(cfg *config.Config, registryClient *redis.Client) ([]
 		{name: "search-service", baseURL: cfg.Services.SearchURL, timeoutMS: timeoutCfg.SearchMS},
 		{name: "workspace-service", baseURL: cfg.Services.WorkspaceURL, timeoutMS: timeoutCfg.WorkspaceMS},
 		{name: "project-service", baseURL: cfg.Services.ProjectURL, timeoutMS: timeoutCfg.ProjectMS},
+		{name: "docs-service", baseURL: cfg.Services.DocsURL, timeoutMS: timeoutCfg.DefaultMS},
+		{name: "calendar-service", baseURL: cfg.Services.CalendarURL, timeoutMS: timeoutCfg.DefaultMS},
+		{name: "approval-service", baseURL: cfg.Services.ApprovalURL, timeoutMS: timeoutCfg.DefaultMS},
 		{name: "notification-service", baseURL: cfg.Services.NotificationURL, timeoutMS: timeoutCfg.DefaultMS},
+		{name: "ai-service", baseURL: cfg.Services.AIURL, timeoutMS: timeoutCfg.DefaultMS},
 	}
 
 	services := make([]*upstreamService, 0, len(specs))
@@ -355,6 +359,22 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 	if err != nil {
 		return nil, err
 	}
+	docsService, err := resolve("docs-service")
+	if err != nil {
+		return nil, err
+	}
+	calendarService, err := resolve("calendar-service")
+	if err != nil {
+		return nil, err
+	}
+	approvalService, err := resolve("approval-service")
+	if err != nil {
+		return nil, err
+	}
+	aiService, err := resolve("ai-service")
+	if err != nil {
+		return nil, err
+	}
 
 	return []*routeSpec{
 		{
@@ -382,6 +402,24 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 			service:     userService,
 			prefixPath:  "/api/v1/departments",
 			description: "Department listing endpoints.",
+		},
+		{
+			name:        "user-rbac",
+			service:     userService,
+			prefixPath:  "/api/v1/roles",
+			description: "Role listing and management endpoints.",
+		},
+		{
+			name:        "user-permissions",
+			service:     userService,
+			prefixPath:  "/api/v1/permissions",
+			description: "Permission listing endpoints.",
+		},
+		{
+			name:        "user-rbac-assign",
+			service:     userService,
+			prefixPath:  "/api/v1/user-roles",
+			description: "User role assignment endpoints.",
 		},
 		{
 			name:        "file-direct",
@@ -415,10 +453,30 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 			description: "Schedule CRUD and share endpoints.",
 		},
 		{
+			name:        "user-project-roles",
+			service:     userService,
+			prefixPath:  "/api/v1/projects/",
+			suffixPath:  "/roles",
+			description: "Project role listing and management endpoints.",
+		},
+		{
+			name:        "user-project-members",
+			service:     userService,
+			prefixPath:  "/api/v1/projects/",
+			suffixPath:  "/members",
+			description: "Project member management endpoints.",
+		},
+		{
 			name:        "project-projects",
 			service:     projectService,
 			prefixPath:  "/api/v1/projects",
 			description: "Project CRUD, issue management, and type listing endpoints.",
+		},
+		{
+			name:        "project-custom-fields",
+			service:     projectService,
+			prefixPath:  "/api/v1/custom-fields",
+			description: "Custom field definition management endpoints.",
 		},
 		{
 			name:        "project-issues",
@@ -437,6 +495,36 @@ func buildRouteSpecs(services []*upstreamService) ([]*routeSpec, error) {
 			service:     imService,
 			prefixPath:  "/api/v1/messages",
 			description: "Dedicated message endpoints.",
+		},
+		{
+			name:        "docs-list",
+			service:     docsService,
+			prefixPath:  "/api/v1/documents",
+			description: "Document CRUD, revision listing, and knowledge base endpoints.",
+		},
+		{
+			name:        "calendar-list",
+			service:     calendarService,
+			prefixPath:  "/api/v1/calendar",
+			description: "Calendar events listing and management endpoints.",
+		},
+		{
+			name:        "meeting-rooms",
+			service:     calendarService,
+			prefixPath:  "/api/v1/meetings",
+			description: "Meeting room management endpoints.",
+		},
+		{
+			name:        "approval-list",
+			service:     approvalService,
+			prefixPath:  "/api/v1/approvals",
+			description: "Approval template and instance management endpoints.",
+		},
+		{
+			name:        "ai-search",
+			service:     aiService,
+			prefixPath:  "/api/v1/ai",
+			description: "AI smart search and task summarization endpoints.",
 		},
 		{
 			name:        "notification-list",

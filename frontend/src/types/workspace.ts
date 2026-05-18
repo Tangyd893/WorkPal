@@ -202,3 +202,235 @@ export interface IssueType {
   hierarchy_level: number
   is_standard: boolean
 }
+
+export interface WorkflowTransition {
+  from: string
+  to: string
+  conditions?: WorkflowCondition[]
+  validators?: WorkflowValidator[]
+  post_functions?: WorkflowPostFunction[]
+}
+
+export interface WorkflowCondition {
+  field: string
+  operator: string
+  value?: string
+}
+
+export interface WorkflowValidator {
+  class: string
+  args?: Record<string, unknown>
+}
+
+export interface WorkflowPostFunction {
+  class: string
+  args?: Record<string, unknown>
+}
+
+export interface WorkflowDSL {
+  statuses: string[]
+  transitions: WorkflowTransition[]
+}
+
+export interface Workflow {
+  id: string
+  project_id: number
+  name: string
+  description: string
+  is_active: boolean
+  dsl_definition: WorkflowDSL
+  created_at: string
+}
+
+export interface CreateWorkflowInput {
+  name?: string
+  description?: string
+  is_active?: boolean
+  dsl_definition?: WorkflowDSL
+}
+
+export interface AvailableStatuses {
+  current_status: string
+  statuses: string[]
+}
+
+export interface Role {
+  id: number
+  name: string
+  description: string
+  is_system: boolean
+}
+
+export interface Permission {
+  id: number
+  code: string
+  name: string
+  description: string
+  resource_type: string
+}
+
+export interface ProjectRole {
+  id: number
+  project_id: number
+  name: string
+  description: string
+  is_system: boolean
+}
+
+export interface ProjectMember {
+  user_id: number
+  project_id: number
+  role_id: number
+  role_name: string
+}
+
+export interface AssignRoleInput {
+  user_id: number
+  role_id: number
+  project_id?: number | null
+}
+
+export interface AddProjectMemberInput {
+  user_id: number
+  project_role_id: number
+}
+
+export interface CustomFieldDef {
+  id: number
+  project_id: number
+  name: string
+  field_type: string
+  options: string[]
+  is_required: boolean
+  sort_order: number
+}
+
+export interface CreateCustomFieldInput {
+  name: string
+  field_type: string
+  options?: string[]
+  is_required?: boolean
+  sort_order?: number
+}
+
+export interface CustomFieldValue {
+  id: number
+  issue_id: number
+  field_id: number
+  field_name: string
+  field_type: string
+  value_text: string
+  value_number: number
+  value_date: string | null
+}
+
+export interface UpsertCustomFieldValueInput {
+  field_id: number
+  value_text?: string
+  value_number?: number
+  value_date?: string | null
+}
+
+export interface Document {
+  id: number
+  project_id: number | null
+  parent_id: number | null
+  title: string
+  created_by: number
+  updated_by: number
+  is_folder: boolean
+  sort_order: number
+  content?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateDocumentInput {
+  project_id?: number | null
+  parent_id?: number | null
+  title: string
+  is_folder?: boolean
+  content?: string
+}
+
+export interface DocumentRevision {
+  id: number
+  document_id: number
+  version: number
+  content: string
+  created_by: number
+  created_at: string
+}
+
+export interface CalendarEvent {
+  id: number
+  project_id: number | null
+  title: string
+  description: string
+  starts_at: string
+  ends_at: string
+  is_all_day: boolean
+  location: string
+  organizer_id: number
+  attendees?: CalendarAttendee[]
+  created_at: string
+}
+
+export interface CalendarAttendee {
+  id: number
+  user_id: number
+  status: string
+}
+
+export interface CreateCalendarInput {
+  project_id?: number | null
+  title: string
+  description?: string
+  starts_at: string
+  ends_at: string
+  is_all_day?: boolean
+  location?: string
+  attendee_ids?: number[]
+}
+
+export interface ApprovalTemplate {
+  id: number
+  project_id: number | null
+  name: string
+  description: string
+  form_schema: string
+  flow_definition: string
+  is_active: boolean
+}
+
+export interface ApprovalInstance {
+  id: number
+  template_id: number
+  title: string
+  form_data: string
+  status: string
+  submitter_id: number
+  current_node_id: string
+  submitted_at: string
+  actions?: ApprovalAction[]
+}
+
+export interface ApprovalAction {
+  id: number
+  node_id: string
+  action: string
+  comment: string
+  user_id: number
+  created_at: string
+}
+
+export interface CreateApprovalInput {
+  template_id: number
+  title: string
+  form_data?: string
+}
+
+export interface ApprovalActionInput {
+  action: string
+  comment?: string
+}
