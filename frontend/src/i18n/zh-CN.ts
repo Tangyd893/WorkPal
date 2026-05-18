@@ -50,6 +50,9 @@ export const zhCNTranslations: AppTranslations = {
       files: '文件',
       directory: '通讯录',
       projects: '项目',
+      docs: '文档',
+      calendar: '日历',
+      approvals: '审批',
     },
     shell: {
       subtitle: '办公协作工作台',
@@ -68,6 +71,7 @@ export const zhCNTranslations: AppTranslations = {
         work: '工作',
         assets: '文件',
         projects: '项目',
+        knowledge: '知识',
       },
     },
     confirm: {

@@ -42,7 +42,7 @@ export interface AppTranslations {
     helperTitle: string
     helperItems: string[]
   }
-  navigation: Record<'overview' | 'chat' | 'tasks' | 'schedule' | 'files' | 'directory' | 'projects', string>
+  navigation: Record<'overview' | 'chat' | 'tasks' | 'schedule' | 'files' | 'directory' | 'projects' | 'docs' | 'calendar' | 'approvals', string>
   shell: {
     subtitle: string
     welcome: string
@@ -54,7 +54,7 @@ export interface AppTranslations {
     moduleSwitcherHint: string
     notifications: string
     noNotifications: string
-    navGroups: Record<'overview' | 'collaboration' | 'work' | 'assets' | 'projects', string>
+    navGroups: Record<'overview' | 'collaboration' | 'work' | 'assets' | 'projects' | 'knowledge', string>
   }
   confirm: {
     confirmAction: string

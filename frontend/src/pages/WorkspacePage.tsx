@@ -17,7 +17,7 @@ import { useI18n } from '../i18n'
 import type { WorkspaceSection } from '../types/workspace'
 import type { ConfirmRequest } from '../types/workspaceUi'
 
-const sectionOrder: WorkspaceSection[] = ['overview', 'chat', 'tasks', 'schedule', 'files', 'directory', 'projects']
+const sectionOrder: WorkspaceSection[] = ['overview', 'chat', 'tasks', 'schedule', 'files', 'directory', 'projects', 'docs', 'calendar', 'approvals']
 
 function isWorkspaceSection(value: string | undefined): value is WorkspaceSection {
   return sectionOrder.includes(value as WorkspaceSection)

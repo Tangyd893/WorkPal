@@ -12,6 +12,9 @@ const SchedulePanel = lazy(() => import('./SchedulePanel'))
 const FilesPanel = lazy(() => import('./FilesPanel'))
 const DirectoryPanel = lazy(() => import('./DirectoryPanel'))
 const ProjectsPanel = lazy(() => import('./ProjectsPanel'))
+const DocsPanel = lazy(() => import('./DocsPanel'))
+const CalendarPanel = lazy(() => import('./CalendarPanel'))
+const ApprovalsPanel = lazy(() => import('./ApprovalsPanel'))
 
 interface WorkspaceContentProps {
   activeSection: WorkspaceSection
@@ -170,5 +173,11 @@ export default function WorkspaceContent({
           }
         />
       )
+    case 'docs':
+      return <DocsPanel text={text} getDisplayName={workspace.getDisplayName} />
+    case 'calendar':
+      return <CalendarPanel text={text} getDisplayName={workspace.getDisplayName} />
+    case 'approvals':
+      return <ApprovalsPanel text={text} getDisplayName={workspace.getDisplayName} />
   }
 }

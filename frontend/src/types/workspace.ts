@@ -1,6 +1,6 @@
 export type Locale = 'en' | 'zh-CN'
 export type ThemeMode = 'light' | 'dark'
-export type WorkspaceSection = 'overview' | 'chat' | 'tasks' | 'schedule' | 'files' | 'directory' | 'projects'
+export type WorkspaceSection = 'overview' | 'chat' | 'tasks' | 'schedule' | 'files' | 'directory' | 'projects' | 'docs' | 'calendar' | 'approvals'
 export type TaskStatus = 'planned' | 'in_progress' | 'review' | 'done'
 export type TaskPriority = 'high' | 'medium' | 'low'
 export type DocumentStatus = 'draft' | 'review' | 'ready'

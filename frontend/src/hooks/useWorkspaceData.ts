@@ -23,6 +23,9 @@ const resourcesBySection: Record<WorkspaceSection, ResourceKey[]> = {
   files: ['files'],
   directory: [],
   projects: ['projects'],
+  docs: [],
+  calendar: [],
+  approvals: [],
 }
 
 function sortUsers(users: WorkspaceUser[]): WorkspaceUser[] {

@@ -50,6 +50,9 @@ export const enTranslations: AppTranslations = {
       files: 'Files',
       directory: 'Directory',
       projects: 'Projects',
+      docs: 'Docs',
+      calendar: 'Calendar',
+      approvals: 'Approvals',
     },
     shell: {
       subtitle: 'Office collaboration workspace',
@@ -68,6 +71,7 @@ export const enTranslations: AppTranslations = {
         work: 'Work',
         assets: 'Files',
         projects: 'Projects',
+        knowledge: 'Knowledge',
       },
     },
     confirm: {
