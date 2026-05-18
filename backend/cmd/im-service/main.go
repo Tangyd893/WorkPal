@@ -45,6 +45,9 @@ func main() {
 		&model.Message{},
 		&model.MessageOutbox{},
 		&model.MessageRead{},
+		&model.Channel{},
+		&model.ChannelMember{},
+		&model.Thread{},
 		&audit.Log{},
 	); err != nil {
 		log.Fatalf("migrate im service schema: %v", err)
@@ -87,7 +90,8 @@ func main() {
 		platform.RedisHealthCheck("redis", redisClient),
 	)
 	apiV1 := r.Group("/api/v1")
-	channelHandler := handler.NewChannelHandler()
+	channelRepo := repo.NewChannelRepo(db)
+	channelHandler := handler.NewChannelHandler(channelRepo)
 	convHandler.RegisterRoutes(apiV1)
 	msgHandler.RegisterRoutes(apiV1)
 	channelHandler.RegisterRoutes(apiV1)

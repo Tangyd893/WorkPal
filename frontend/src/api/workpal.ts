@@ -17,6 +17,7 @@ import type {
   Issue,
   IssueChangelog,
   IssueType,
+  Notification,
   Project,
   ScheduleEvent,
   TaskStatus,
@@ -434,5 +435,18 @@ export const workpalApi = {
   },
   processApprovalAction(id: number, payload: ApprovalActionInput) {
     return apiPost<ApprovalInstance, ApprovalActionInput>(`/approvals/instances/${id}/action`, payload)
+  },
+
+  listNotifications() {
+    return apiGet<Notification[]>('/notifications')
+  },
+  getUnreadNotificationCount() {
+    return apiGet<{ count: number }>('/notifications/unread-count')
+  },
+  markNotificationRead(id: number) {
+    return apiPut<null, undefined>(`/notifications/${id}/read`)
+  },
+  markAllNotificationsRead() {
+    return apiPut<null, undefined>('/notifications/read-all')
   },
 }

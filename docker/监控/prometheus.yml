@@ -32,3 +32,33 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["workspace-service:8085"]
+
+  - job_name: workpal-project-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["project-service:8086"]
+
+  - job_name: workpal-docs-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["docs-service:8087"]
+
+  - job_name: workpal-calendar-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["calendar-service:8088"]
+
+  - job_name: workpal-approval-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["approval-service:8089"]
+
+  - job_name: workpal-notification-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["notification-service:8090"]
+
+  - job_name: workpal-ai-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ai-service:8091"]

@@ -78,8 +78,15 @@ services:
       SERVICES_SEARCHURL: http://search-service:8084
       SERVICES_WORKSPACEURL: http://workspace-service:8085
       SERVICES_PROJECTURL: http://project-service:8086
+      SERVICES_DOCSURL: http://docs-service:8087
+      SERVICES_CALENDARURL: http://calendar-service:8088
+      SERVICES_APPROVALURL: http://approval-service:8089
+      SERVICES_AIURL: http://ai-service:8091
       DATABASE_NAMES_PROJECT: workpal_project
       DATABASE_NAMES_NOTIFICATION: workpal_notification
+      DATABASE_NAMES_DOCS: workpal_docs
+      DATABASE_NAMES_CALENDAR: workpal_calendar
+      DATABASE_NAMES_APPROVAL: workpal_approval
     depends_on:
       postgres:
         condition: service_healthy
@@ -195,10 +202,74 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
-        condition: service_healthy
     ports:
       - "8090:8090"
+    restart: unless-stopped
+
+  docs-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: docs-service
+    container_name: workpal-docs-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8087:8087"
+    restart: unless-stopped
+
+  calendar-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: calendar-service
+    container_name: workpal-calendar-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    restart: unless-stopped
+
+  approval-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: approval-service
+    container_name: workpal-approval-service
+    environment: *backend_env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8089:8089"
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      args:
+        SERVICE: ai-service
+    container_name: workpal-ai-service
+    environment: *backend_env
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8091:8091"
     restart: unless-stopped
 
   kafka:
@@ -234,7 +305,7 @@ services:
       - "9200:9200"
     mem_limit: 1g
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\|yellow'"]
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE 'green|yellow'"]
       interval: 10s
       timeout: 10s
       retries: 20
@@ -264,6 +335,14 @@ services:
       project-service:
         condition: service_started
       notification-service:
+        condition: service_started
+      docs-service:
+        condition: service_started
+      calendar-service:
+        condition: service_started
+      approval-service:
+        condition: service_started
+      ai-service:
         condition: service_started
     ports:
       - "8080:8080"

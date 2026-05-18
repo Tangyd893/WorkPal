@@ -65,6 +65,7 @@ export const enTranslations: AppTranslations = {
       moduleSwitcherHint: 'Search and jump to a workspace module.',
       notifications: 'Notifications',
       noNotifications: 'No unread notifications.',
+      markAllRead: 'Mark all read',
       navGroups: {
         overview: 'Overview',
         collaboration: 'Collaboration',

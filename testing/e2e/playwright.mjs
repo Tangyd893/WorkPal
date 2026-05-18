@@ -285,6 +285,252 @@ async function testWorkspaceUI() {
   }
 }
 
+async function testProjectIssueWorkflow() {
+  console.log('\n[Test] Project 2.0 — project creation, issue lifecycle, and kanban')
+
+  try {
+    const { body } = await loginAPI({ username: 'admin', password: 'admin123' })
+    const token = body.data.token
+
+    const projResponse = await page.request.post(`${API_URL}/api/v1/projects`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { key: 'ACCPT', name: 'E2E Acceptance Project', description: 'Project created by E2E smoke test', lead_id: 0, icon: 'folder', category: 'software' },
+    })
+    const projBody = await projResponse.json()
+    assert(projResponse.status() === 200 && projBody.code === 0, 'project can be created')
+    const projectID = projBody.data.id
+    assert(projectID && projectID.startsWith('prj-'), 'project creation returns a formatted ID')
+
+    const typesResponse = await page.request.get(`${API_URL}/api/v1/projects/${projectID}/issue-types`, {
+      headers: authHeaders(token),
+    })
+    const typesBody = await typesResponse.json()
+    const types = typesBody.data ?? []
+    assert(Array.isArray(types) && types.length >= 5, 'default issue types are initialized on project creation')
+
+    const taskType = types.find((t) => t.name === 'Task')
+    assert(Boolean(taskType), 'default Task issue type exists')
+
+    const issueResponse = await page.request.post(`${API_URL}/api/v1/projects/${projectID}/issues`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: {
+        project_id: parseInt(projectID.replace('prj-', ''), 10),
+        issue_type_id: taskType?.id ?? 1,
+        summary: 'E2E smoke test issue',
+        description: 'Created via acceptance test',
+        priority: 'High',
+        assignee_id: 0,
+        reporter_id: 0,
+        version_ids: [],
+        time_estimate: 0,
+      },
+    })
+    const issueBody = await issueResponse.json()
+    assert(issueResponse.status() === 200 && issueBody.code === 0, 'issue can be created under a project')
+    const issueID = issueBody.data.id
+    assert(issueID && issueID.startsWith('prj-'), 'issue creation returns a formatted ID')
+    assert(issueBody.data.status === 'Open', 'new issue starts in Open status')
+    assert(issueBody.data.key && issueBody.data.key.startsWith('ACCPT'), 'issue key uses project key prefix')
+
+    const statusResponse = await page.request.put(`${API_URL}/api/v1/issues/${issueID}/status`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { status: 'In Progress' },
+    })
+    const statusBody = await statusResponse.json()
+    assert(statusResponse.status() === 200 && statusBody.code === 0, 'issue status can be transitioned to In Progress')
+    assert(statusBody.data.status === 'In Progress', 'issue status updated correctly')
+
+    const changelogResponse = await page.request.get(`${API_URL}/api/v1/issues/${issueID}/changelogs`, {
+      headers: authHeaders(token),
+    })
+    const changelogBody = await changelogResponse.json()
+    assert(Array.isArray(changelogBody.data) && changelogBody.data.length > 0, 'issue changelog records are created on status transition')
+
+    const listResponse = await page.request.get(`${API_URL}/api/v1/projects/${projectID}/issues`, {
+      headers: authHeaders(token),
+    })
+    const listBody = await listResponse.json()
+    assert(Array.isArray(listBody.data) && listBody.data.length >= 1, 'project issues can be listed')
+  } catch (error) {
+    assert(false, `project/issue workflow failed: ${error.message}`)
+  }
+}
+
+async function testDocsAndRevisions() {
+  console.log('\n[Test] Docs 2.0 — document CRUD and revisions')
+
+  try {
+    const { body } = await loginAPI({ username: 'admin', password: 'admin123' })
+    const token = body.data.token
+
+    const createResponse = await page.request.post(`${API_URL}/api/v1/documents`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { title: 'E2E Acceptance Document', content: 'Initial revision content', is_folder: false },
+    })
+    const createBody = await createResponse.json()
+    assert(createResponse.status() === 200 && createBody.code === 0, 'document can be created')
+    const docID = createBody.data.id
+    assert(typeof docID === 'number', 'document creation returns a numeric ID')
+
+    const updateResponse = await page.request.put(`${API_URL}/api/v1/documents/${docID}`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { content: 'Updated revision content' },
+    })
+    const updateBody = await updateResponse.json()
+    assert(updateResponse.status() === 200 && updateBody.code === 0, 'document content can be updated')
+
+    const revisionsResponse = await page.request.get(`${API_URL}/api/v1/documents/${docID}/revisions`, {
+      headers: authHeaders(token),
+    })
+    const revisionsBody = await revisionsResponse.json()
+    assert(Array.isArray(revisionsBody.data) && revisionsBody.data.length > 0, 'document revision history is recorded')
+
+    const getResponse = await page.request.get(`${API_URL}/api/v1/documents/${docID}`, {
+      headers: authHeaders(token),
+    })
+    const getBody = await getResponse.json()
+    assert(getResponse.status() === 200 && getBody.code === 0, 'document can be retrieved by ID')
+    assert(getBody.data.content === 'Updated revision content', 'retrieved document has latest content')
+
+    const listResponse = await page.request.get(`${API_URL}/api/v1/documents`, {
+      headers: authHeaders(token),
+    })
+    const listBody = await listResponse.json()
+    assert(Array.isArray(listBody.data) && listBody.data.length >= 1, 'documents list is accessible')
+  } catch (error) {
+    assert(false, `docs/revisions workflow failed: ${error.message}`)
+  }
+}
+
+async function testCalendarEventWithAttendees() {
+  console.log('\n[Test] Calendar 2.0 — event CRUD with attendees')
+
+  try {
+    const { body } = await loginAPI({ username: 'admin', password: 'admin123' })
+    const token = body.data.token
+    const users = await fetchUsers(token)
+    const emma = users.find((u) => u.username === 'emma.chen')
+
+    const createResponse = await page.request.post(`${API_URL}/api/v1/calendar`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: {
+        title: 'E2E Calendar Event',
+        description: 'Acceptance test calendar event',
+        starts_at: '2026-05-20T09:00:00Z',
+        ends_at: '2026-05-20T10:00:00Z',
+        is_all_day: false,
+        location: 'Meeting Room A',
+        attendee_ids: emma ? [emma.id] : [],
+      },
+    })
+    const createBody = await createResponse.json()
+    assert(createResponse.status() === 200 && createBody.code === 0, 'calendar event can be created')
+    const eventID = createBody.data.id
+    assert(typeof eventID === 'number', 'calendar event creation returns a numeric ID')
+
+    const getResponse = await page.request.get(`${API_URL}/api/v1/calendar/${eventID}`, {
+      headers: authHeaders(token),
+    })
+    const getBody = await getResponse.json()
+    assert(getResponse.status() === 200 && getBody.code === 0, 'calendar event can be retrieved')
+    assert(getBody.data.title === 'E2E Calendar Event', 'retrieved event has correct title')
+
+    if (emma) {
+      assert(Array.isArray(getBody.data.attendees) && getBody.data.attendees.length > 0, 'calendar event has attendees')
+    }
+
+    const updateResponse = await page.request.put(`${API_URL}/api/v1/calendar/${eventID}`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { description: 'Updated description' },
+    })
+    const updateBody = await updateResponse.json()
+    assert(updateResponse.status() === 200 && updateBody.code === 0, 'calendar event can be updated')
+
+    const deleteResponse = await page.request.delete(`${API_URL}/api/v1/calendar/${eventID}`, {
+      headers: authHeaders(token),
+    })
+    assert(deleteResponse.status() === 200, 'calendar event can be deleted')
+  } catch (error) {
+    assert(false, `calendar workflow failed: ${error.message}`)
+  }
+}
+
+async function testApprovalSubmitAndAction() {
+  console.log('\n[Test] Approval 2.0 — template, submission, approval/rejection')
+
+  try {
+    const { body } = await loginAPI({ username: 'admin', password: 'admin123' })
+    const token = body.data.token
+
+    const templateResponse = await page.request.post(`${API_URL}/api/v1/approvals/templates`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { name: 'E2E Approval Template', description: 'Acceptance test approval template', form_schema: '{"fields":[]}' },
+    })
+    const templateBody = await templateResponse.json()
+    assert(templateResponse.status() === 200 && templateBody.code === 0, 'approval template can be created')
+    const templateID = templateBody.data.id
+
+    const instanceResponse = await page.request.post(`${API_URL}/api/v1/approvals/instances`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { template_id: templateID, title: 'E2E Approval Request', form_data: '{}' },
+    })
+    const instanceBody = await instanceResponse.json()
+    assert(instanceResponse.status() === 200 && instanceBody.code === 0, 'approval instance can be submitted')
+    const instanceID = instanceBody.data.id
+
+    const getResponse = await page.request.get(`${API_URL}/api/v1/approvals/instances/${instanceID}`, {
+      headers: authHeaders(token),
+    })
+    const getBody = await getResponse.json()
+    assert(getResponse.status() === 200 && getBody.code === 0, 'approval instance can be retrieved')
+
+    const actionResponse = await page.request.post(`${API_URL}/api/v1/approvals/instances/${instanceID}/action`, {
+      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      data: { action: 'approve', comment: 'Approved by E2E test' },
+    })
+    const actionBody = await actionResponse.json()
+    assert(actionResponse.status() === 200 && actionBody.code === 0, 'approval instance can be processed with approve action')
+
+    const listResponse = await page.request.get(`${API_URL}/api/v1/approvals/instances`, {
+      headers: authHeaders(token),
+    })
+    const listBody = await listResponse.json()
+    assert(Array.isArray(listBody.data) && listBody.data.length >= 1, 'approval instances list is accessible')
+  } catch (error) {
+    assert(false, `approval workflow failed: ${error.message}`)
+  }
+}
+
+async function testNotificationIntegration() {
+  console.log('\n[Test] Notification 2.0 — list, unread count, mark read')
+
+  try {
+    const { body } = await loginAPI({ username: 'admin', password: 'admin123' })
+    const token = body.data.token
+
+    const listResponse = await page.request.get(`${API_URL}/api/v1/notifications`, {
+      headers: authHeaders(token),
+    })
+    const listBody = await listResponse.json()
+    assert(listResponse.status() === 200 && listBody.code === 0, 'notifications list endpoint is accessible')
+    assert(Array.isArray(listBody.data), 'notifications list returns an array')
+
+    const unreadResponse = await page.request.get(`${API_URL}/api/v1/notifications/unread-count`, {
+      headers: authHeaders(token),
+    })
+    const unreadBody = await unreadResponse.json()
+    assert(unreadResponse.status() === 200 && unreadBody.code === 0, 'unread notification count is accessible')
+    assert(typeof unreadBody.data?.count === 'number', 'unread count returns a numeric value')
+
+    const markAllResponse = await page.request.put(`${API_URL}/api/v1/notifications/read-all`, {
+      headers: authHeaders(token),
+    })
+    assert(markAllResponse.status() === 200, 'mark all notifications read succeeds')
+  } catch (error) {
+    assert(false, `notification integration failed: ${error.message}`)
+  }
+}
+
 async function run() {
   console.log('WorkPal E2E smoke test')
   console.log(`  frontend: ${BASE_URL}`)
@@ -298,6 +544,11 @@ async function run() {
     await testSeededLoginsAPI()
     await testChatAndGroupAPI()
     await testWorkspaceUI()
+    await testProjectIssueWorkflow()
+    await testDocsAndRevisions()
+    await testCalendarEventWithAttendees()
+    await testApprovalSubmitAndAction()
+    await testNotificationIntegration()
   } catch (error) {
     console.error(`Unexpected test error: ${error.message}`)
     failed++

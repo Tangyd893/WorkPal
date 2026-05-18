@@ -111,3 +111,45 @@ type ConvMember struct {
 	Nickname  string `json:"nickname"`
 	AvatarURL string `json:"avatar_url"`
 }
+
+type Channel struct {
+	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	ProjectID   *int64    `json:"project_id"`
+	Name        string    `gorm:"size:255;not null" json:"name"`
+	Description string    `gorm:"type:text;default:''" json:"description"`
+	ChannelType string    `gorm:"size:20;not null;default:'public'" json:"channel_type"`
+	CreatedBy   int64     `gorm:"not null" json:"created_by"`
+	IsArchived  bool      `gorm:"default:false" json:"is_archived"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (Channel) TableName() string {
+	return "channels"
+}
+
+type ChannelMember struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	ChannelID int64     `gorm:"not null;index;uniqueIndex:uniq_channel_member" json:"channel_id"`
+	UserID    int64     `gorm:"not null;index;uniqueIndex:uniq_channel_member" json:"user_id"`
+	Role      string    `gorm:"size:20;not null;default:'member'" json:"role"`
+	JoinedAt  time.Time `gorm:"autoCreateTime" json:"joined_at"`
+}
+
+func (ChannelMember) TableName() string {
+	return "channel_members"
+}
+
+type Thread struct {
+	ID          int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ChannelID   int64      `gorm:"not null;index" json:"channel_id"`
+	ParentMsgID int64      `gorm:"not null;index" json:"parent_msg_id"`
+	Title       string     `gorm:"size:500;default:''" json:"title"`
+	ReplyCount  int        `gorm:"default:0" json:"reply_count"`
+	LastReplyAt *time.Time `json:"last_reply_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+func (Thread) TableName() string {
+	return "threads"
+}

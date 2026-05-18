@@ -31,6 +31,7 @@ type Repository interface {
 	ListChangelogs(ctx context.Context, issueID int64) ([]*model.IssueChangelog, error)
 	CreateAssociation(ctx context.Context, assoc *model.Association) error
 	ListAssociations(ctx context.Context, sourceType string, sourceID int64) ([]*model.Association, error)
+	CreateIssueType(ctx context.Context, t *model.IssueType) error
 	ListIssueTypes(ctx context.Context, projectID int64) ([]*model.IssueType, error)
 	ListWorkflows(ctx context.Context, projectID int64) ([]*model.Workflow, error)
 	GetWorkflow(ctx context.Context, workflowID int64) (*model.Workflow, error)
@@ -618,8 +619,9 @@ func (s *Service) seedDefaultIssueTypes(ctx context.Context, projectID int64) {
 			HierarchyLevel: d.hierarchyLevel,
 			IsStandard:     true,
 		}
-		_ = s.repo.(interface{ CreateIssueType(ctx context.Context, t *model.IssueType) error }).(interface{ CreateIssueType(ctx context.Context, t *model.IssueType) error })
-		_ = et
+		if err := s.repo.CreateIssueType(ctx, et); err != nil {
+			return
+		}
 	}
 }
 

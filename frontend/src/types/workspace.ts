@@ -434,3 +434,14 @@ export interface ApprovalActionInput {
   action: string
   comment?: string
 }
+
+export interface Notification {
+  id: number
+  type: string
+  title: string
+  content: string
+  entity_type: string
+  entity_id: string
+  is_read: boolean
+  created_at: string
+}

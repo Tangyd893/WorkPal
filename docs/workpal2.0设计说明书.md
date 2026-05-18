@@ -295,7 +295,7 @@ workflow:
 实现方案：
   - RBAC 模型存储在 PostgreSQL
   - 鉴权中间件缓存热数据到 Redis
-  - 前端通过 /api/v2/permissions/check 批量校验
+  - 前端通过 /api/v1/permissions/check 批量校验
 ```
 
 ### 3.4 技术栈详细
@@ -604,7 +604,7 @@ ALTER TABLE messages
 前端：弹出 Issue 创建表单（类型/摘要/描述/指派人/优先级/截止日期/父Issue）
          │
          ▼
-Gateway：POST /api/v2/projects/{projectId}/issues
+Gateway：POST /api/v1/projects/{projectId}/issues
          │
          ▼
 Project Service：
@@ -653,7 +653,7 @@ IM Service：
 #### 6.1.3 文档协同编辑
 
 ```
-用户 A 打开文档：GET /api/v2/docs/{docId}
+用户 A 打开文档：GET /api/v1/docs/{docId}
          │
          ▼
 Docs Service：
@@ -836,9 +836,8 @@ Week 17-18: 性能优化 + 多端
 
 ### 9.2 API 兼容
 
-- 1.0 的所有 `/api/v1/*` 路径在 Gateway 层保留转发
-- 2.0 新接口统一使用 `/api/v2/*`
-- 给前端一个版本的过渡期（两个版本的前端可以同时运行）
+- 所有接口统一使用 `/api/v1/*` 路径，Gateway 层负责路由转发
+- 前端所有模块请求路径均通过 `/api/v1` 前缀访问各微服务
 
 ### 9.3 前端渐进式升级
 

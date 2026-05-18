@@ -65,6 +65,7 @@ export const zhCNTranslations: AppTranslations = {
       moduleSwitcherHint: '搜索并跳转到工作台模块。',
       notifications: '通知',
       noNotifications: '暂无未读通知。',
+      markAllRead: '全部已读',
       navGroups: {
         overview: '总览',
         collaboration: '协作',

@@ -34,6 +34,8 @@ func main() {
 		&projectModel.IssueChangelog{},
 		&projectModel.Association{},
 		&projectModel.Workflow{},
+		&projectModel.CustomFieldDef{},
+		&projectModel.CustomFieldValue{},
 		&audit.Log{},
 	); err != nil {
 		log.Fatalf("migrate project service schema: %v", err)

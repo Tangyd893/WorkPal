@@ -54,6 +54,7 @@ export interface AppTranslations {
     moduleSwitcherHint: string
     notifications: string
     noNotifications: string
+    markAllRead: string
     navGroups: Record<'overview' | 'collaboration' | 'work' | 'assets' | 'projects' | 'knowledge', string>
   }
   confirm: {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { AppTranslations } from '../i18n'
-import type { Locale, ThemeMode, WorkspaceSection } from '../types/workspace'
+import type { Locale, Notification, ThemeMode, WorkspaceSection } from '../types/workspace'
 
 interface TopbarProps {
   activeSection: WorkspaceSection
@@ -8,7 +8,10 @@ interface TopbarProps {
   locale: Locale
   theme: ThemeMode
   labels: AppTranslations
-  notifications: string[]
+  notifications: Notification[]
+  unreadCount: number
+  onMarkRead?: (id: number) => void
+  onMarkAllRead?: () => void
   onLocaleChange: (locale: Locale) => void
   onThemeChange: (theme: ThemeMode) => void
   onOpenSettings: () => void
@@ -22,13 +25,15 @@ export default function Topbar({
   theme,
   labels,
   notifications,
+  unreadCount,
+  onMarkRead,
+  onMarkAllRead,
   onLocaleChange,
   onThemeChange,
   onOpenSettings,
   onLogout,
 }: TopbarProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const unreadCount = notifications.length
   const notificationLabel = useMemo(
     () => `${labels.shell.notifications}${unreadCount > 0 ? ` (${unreadCount})` : ''}`,
     [labels.shell.notifications, unreadCount],
@@ -98,9 +103,36 @@ export default function Topbar({
           </button>
           {notificationsOpen ? (
             <div className="notification-popover" role="status">
-              <strong>{labels.shell.notifications}</strong>
+              <div className="notification-popover-header">
+                <strong>{labels.shell.notifications}</strong>
+                {unreadCount > 0 && onMarkAllRead ? (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => { void onMarkAllRead() }}
+                  >
+                    {labels.shell.markAllRead}
+                  </button>
+                ) : null}
+              </div>
               {notifications.length > 0 ? (
-                notifications.map((item) => <span key={item}>{item}</span>)
+                notifications.map((item) => (
+                  <div
+                    key={item.id}
+                    className={item.is_read ? 'notification-item is-read' : 'notification-item is-unread'}
+                    onClick={() => {
+                      if (!item.is_read && onMarkRead) {
+                        void onMarkRead(item.id)
+                      }
+                    }}
+                  >
+                    <span className="notification-title">{item.title}</span>
+                    <span className="notification-content">{item.content}</span>
+                    <span className="notification-time">
+                      {new Date(item.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                ))
               ) : (
                 <span>{labels.shell.noNotifications}</span>
               )}

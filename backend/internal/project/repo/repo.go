@@ -117,6 +117,10 @@ func (r *Repo) ListAssociations(ctx context.Context, sourceType string, sourceID
 	return assocs, err
 }
 
+func (r *Repo) CreateIssueType(ctx context.Context, t *model.IssueType) error {
+	return r.db.WithContext(ctx).Create(t).Error
+}
+
 func (r *Repo) ListIssueTypes(ctx context.Context, projectID int64) ([]*model.IssueType, error) {
 	var types []*model.IssueType
 	err := r.db.WithContext(ctx).

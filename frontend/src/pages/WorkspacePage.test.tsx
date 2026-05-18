@@ -14,6 +14,10 @@ vi.mock('../api/workpal', () => ({
     listUserFiles: vi.fn(),
     listTasks: vi.fn(),
     listSchedule: vi.fn(),
+    listNotifications: vi.fn(),
+    getUnreadNotificationCount: vi.fn(),
+    markNotificationRead: vi.fn(),
+    markAllNotificationsRead: vi.fn(),
   },
 }))
 
@@ -50,6 +54,8 @@ function mockWorkspaceApi() {
   vi.mocked(workpalApi.listUserFiles).mockResolvedValue([])
   vi.mocked(workpalApi.listTasks).mockResolvedValue([])
   vi.mocked(workpalApi.listSchedule).mockResolvedValue([])
+  vi.mocked(workpalApi.listNotifications).mockResolvedValue([])
+  vi.mocked(workpalApi.getUnreadNotificationCount).mockResolvedValue({ count: 0 })
 }
 
 async function flushAsyncWork() {
@@ -70,11 +76,11 @@ describe('WorkspacePage', () => {
       </MemoryRouter>,
     )
 
-    expect(view.container.textContent).toContain('Loading')
+    expect(view.container.textContent).toContain('加载中...')
     await flushAsyncWork()
 
     expect(workpalApi.listTasks).toHaveBeenCalledTimes(1)
     expect(workpalApi.listSchedule).not.toHaveBeenCalled()
-    expect(view.container.textContent).toContain('Task board')
+    expect(view.container.textContent).toContain('任务')
   })
 })

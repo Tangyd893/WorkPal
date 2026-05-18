@@ -14,6 +14,7 @@ import { useToastStore, type ToastType } from '../hooks/useToastStore'
 import { useWorkspaceActions } from '../hooks/useWorkspaceActions'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
 import { useI18n } from '../i18n'
+import { useNotifications } from '../hooks/useNotifications'
 import type { WorkspaceSection } from '../types/workspace'
 import type { ConfirmRequest } from '../types/workspaceUi'
 
@@ -97,14 +98,7 @@ export default function WorkspacePage() {
     [locale],
   )
 
-  const notifications = useMemo(() => {
-    const activeTasks = workspace.tasks.filter((task) => task.status !== 'done').length
-    const upcomingEvents = workspace.schedule.filter((event) => new Date(event.startsAt).getTime() >= Date.now()).length
-    return [
-      activeTasks > 0 ? `${t.overview.cards.activeTasks}: ${activeTasks}` : '',
-      upcomingEvents > 0 ? `${t.overview.cards.todayMeetings}: ${upcomingEvents}` : '',
-    ].filter(Boolean)
-  }, [t.overview.cards.activeTasks, t.overview.cards.todayMeetings, workspace.schedule, workspace.tasks])
+  const { notifications, unreadCount, markRead, markAllRead } = useNotifications()
 
   const openSection = (targetSection: WorkspaceSection) => navigate(`/workspace/${targetSection}`)
   const requestConfirm = (request: ConfirmRequest) => setConfirmRequest(request)
@@ -154,6 +148,9 @@ export default function WorkspacePage() {
           theme={theme}
           labels={t}
           notifications={notifications}
+          unreadCount={unreadCount}
+          onMarkRead={markRead}
+          onMarkAllRead={markAllRead}
           onLocaleChange={setLocale}
           onThemeChange={setTheme}
           onOpenSettings={() => setDrawerOpen(true)}
